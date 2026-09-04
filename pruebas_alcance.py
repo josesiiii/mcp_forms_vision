@@ -147,6 +147,36 @@ comprobar("VENTANA_RAIZ tiene un solo nombre en el codigo",
           inspect.getsource(plan).count('"WIN_APLICACION"') == 1,
           f"{inspect.getsource(plan).count(chr(34) + 'WIN_APLICACION' + chr(34))} literales")
 
+# ── 6. un canvas mostrado por su VENTANA tambien cuenta ─────────────────────
+print("\n6. show_window('WIN_X') hace alcanzable al canvas que cuelga de WIN_X")
+# Caso real de fclasinv, con la errata incluida: el canvas se llama
+# ESTAUS_DISPONIBLES y la ventana WIN_ESTATUS_DISPONIBLES, asi que ni por
+# nombre coincidian.
+r = rutas(
+    [{"nombre": "WIN_APLICACION", "canvas_primario": "CG$PAGE_1", "titulo": "X"},
+     {"nombre": "WIN_ESTATUS_DISPONIBLES", "canvas_primario": "ESTAUS_DISPONIBLES",
+      "titulo": "Estatus Disponibles"}],
+    [{"nombre": "CG$PAGE_1", "tipo": "Tab", "ventana": "WIN_APLICACION"},
+     {"nombre": "ESTAUS_DISPONIBLES", "tipo": "Content",
+      "ventana": "WIN_ESTATUS_DISPONIBLES"}],
+    codigo="begin show_window('WIN_ESTATUS_DISPONIBLES'); end;")
+comprobar("la invocacion de la ventana se registra",
+          bool(r["invocadores"].get("WIN_ESTATUS_DISPONIBLES")))
+comprobar("y alcanza al canvas, aunque el nombre no coincida",
+          bool(r["invocadores"].get("ESTAUS_DISPONIBLES")),
+          r["invocadores"].get("ESTAUS_DISPONIBLES"))
+comprobar("se anota que llego por la ventana, no por el canvas",
+          all(i.get("via_ventana") == "WIN_ESTATUS_DISPONIBLES"
+              for i in r["invocadores"].get("ESTAUS_DISPONIBLES", [])))
+# Y no se regala alcance a lo que de verdad no lo tiene.
+r = rutas(
+    [{"nombre": "WIN_APLICACION", "canvas_primario": "CG$PAGE_1", "titulo": "X"},
+     {"nombre": "WIN_NADIE", "canvas_primario": "SOLA", "titulo": "Nadie"}],
+    [{"nombre": "CG$PAGE_1", "tipo": "Tab", "ventana": "WIN_APLICACION"},
+     {"nombre": "SOLA", "tipo": "Content", "ventana": "WIN_NADIE"}])
+comprobar("una ventana que nadie invoca deja su canvas sin alcance",
+          not r["invocadores"].get("SOLA") and "SOLA" not in r["canvas_raiz"])
+
 print("\n" + "=" * 70)
 if fallos:
     print(f"RESULTADO: {len(fallos)} FALLO(S) de {hechas}")

@@ -139,6 +139,22 @@ def _analizar_rutas(cargar):
                     if (c.get("ventana") or "").upper() == VENTANA_RAIZ
                     and str(c.get("tipo", "")).lower() != "stacked"}
 
+    # Un canvas se puede mostrar de dos formas, y hasta ahora solo se veia una:
+    #
+    #   show_view('MI_CANVAS')      -> el objetivo ES el canvas
+    #   show_window('WIN_LO_QUE')   -> el objetivo es la VENTANA, y el canvas
+    #                                  sale porque cuelga de ella
+    #
+    # La comprobacion buscaba `invocadores[canvas]`, asi que la segunda forma no
+    # contaba. En fclasinv eso mando a HUERFANA la ventana 'Estatus Disponibles'
+    # -que si se abre, desde el boton AGREGAR_ESTATUS- y con ella sus 6 items.
+    # Ayudo a esconderlo que el canvas se llame ESTAUS_DISPONIBLES, con la
+    # errata, y la ventana WIN_ESTATUS_DISPONIBLES: ni siquiera coincidian de
+    # nombre.
+    for cv, win in ventana_del_canvas.items():
+        if win and invocadores.get(win) and not invocadores.get(cv):
+            invocadores[cv] = [{**i, "via_ventana": win} for i in invocadores[win]]
+
     def encerrada(objetivo):
         """True si solo se invoca desde dentro de una ventana secundaria."""
         invs = invocadores.get(objetivo, [])
