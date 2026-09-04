@@ -456,6 +456,10 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
             pantalla y lo dice: IDENTICAS / CAMBIO MENOR / CAMBIO ESTRUCTURAL.
             Con eso se decide si un control necesita las dos versiones, y se
             caza el caso en que el control NO se movio.
+            COMPARA CONTRA EL ESTADO CERRADO, no contra la foto anterior de
+            otra LOV: dos LOV distintas ocupan la misma zona de pantalla y la
+            diferencia sale en 1-3%, que parece "no paso nada" cuando en
+            realidad hay una lista completamente distinta delante.
         escala: amplia la imagen antes de guardarla (1..10). Para el ICONO de
             un boton, que mide 24x22 px y a ese tamano no se ve: escala=5.
             Antes habia que sacarlo a un temporal, ampliarlo por fuera y
@@ -526,15 +530,52 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
                     f"comparacion contra {os.path.basename(comparar_con)}: "
                     f"{d['veredicto']} ({pct:.2f}% de la superficie)")
                 if d["veredicto"] == "IDENTICAS":
+                    # IDENTICAS es el UNICO negativo fiable, y por eso corta el
+                    # lote. Lleva la escalera de gestos porque aqui es donde se
+                    # abandono antes de tiempo tres veces en fofertas, y luego
+                    # resulto que la lista SI abria por otra via.
                     avisos.append(_aviso(
-                        "nada cambio. Si esperabas un cambio, el control NO se "
-                        "movio: no sigas la pasada."))
+                        "nada cambio: el control NO se movio. La pasada se "
+                        "detiene aqui para no rotular mal lo que venga.\n"
+                        "     Si esperabas abrir una LOV, prueba EN ESTE ORDEN "
+                        "antes de darla por bloqueada:\n"
+                        "       1  la FLECHA azul, midiendo su pixel en una "
+                        "captura RECIENTE (y sumando el origen que dice la "
+                        "captura: confundir ventana con canvas mando el click "
+                        "al campo de al lado)\n"
+                        "       2  click directo sobre el CAMPO\n"
+                        "       3  Ctrl+L con el foco YA verificado en el campo\n"
+                        "       4  F9, que es la tecla que documenta SAFIX\n"
+                        "       5  doble click sobre el campo\n"
+                        "     Y no generalices: en fofertas 'Moneda' es de "
+                        "cabecera y abre, 'Recurso' esta en un panel y solo "
+                        "abrio por la flecha. Se prueba CAMPO POR CAMPO.\n"
+                        "     Si de verdad no abre, mira si su tabla tiene "
+                        "filas antes de llamarlo defecto."))
                 elif d["veredicto"] == "CAMBIO MENOR":
-                    avisos.append("cambio de uno o dos campos: basta UNA foto; "
-                                  "el detalle va en el texto del manual.")
+                    avisos.append(
+                        "cambio de uno o dos campos: basta UNA foto; "
+                        "el detalle va en el texto del manual.\n"
+                        "     OJO: 'MENOR' NO significa que no pasara nada. En "
+                        "una ventana grande un registro entero cargado da 1,4% "
+                        "y un desplegable abierto 1,2%. Solo IDENTICAS es un "
+                        "negativo fiable.")
                 else:
                     avisos.append("cambia lo que el usuario puede hacer: "
                                   "van LAS DOS versiones, con el estado en el nombre.")
+
+    # DE QUE COORDENADAS ES ESTA IMAGEN. Se dice siempre, porque leer un pixel
+    # en la foto y clickarlo sin ajustar el origen es el error mas repetido de
+    # este proceso: paso con una captura de la VENTANA cuyas coordenadas se
+    # usaron como si fueran del CANVAS (50 px de mas en x, 68 en y) y el click
+    # cayo en el campo de al lado. Y paso al revez, con el canvas completo.
+    if left == cl and top == ct:
+        marco = ("coordenadas: esta imagen ES el canvas. Un pixel leido aqui "
+                 "se pulsa tal cual con forms_click.")
+    else:
+        marco = (f"coordenadas: esta imagen empieza en el canvas ({left - cl},"
+                 f"{top - ct}). A todo pixel leido aqui SUMALE eso antes de "
+                 f"pulsarlo, o usa relativo=True si el origen es la ventana.")
 
     gemela = _foto_repetida(ruta)
     if gemela:
@@ -555,6 +596,7 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
             f"CGFK$CUENTAS y de LOV_TCPLANCUENTAS.\n"
             f"  Anotalo como redundante en el .txt de pendientes y sigue.")
 
+    avisos.append(marco)
     _bitacora(accion="capturar", detalle=etiqueta, resultado=ruta, avisos=avisos)
     cola = ("\n  " + "\n  ".join(avisos)) if avisos else ""
     return f"{etiqueta} -> {ruta}  ({aw}x{ah} px){cola}"
@@ -1246,9 +1288,15 @@ def forms_cerrar_popup(hwnd: str = "", ancho_datos: int = 0,
                        intentos: int = 3) -> str:
     """Cierra el recuadro que este encima (LOV, mensaje) y deja la forma libre.
 
-    ESC no cierra las LOVs de Forms de forma fiable, y dejar una abierta
-    arruina todo lo que venga despues: el click de la pestana siguiente se
-    va a la LOV y las capturas salen todas iguales. Paso de verdad.
+    Dejar una LOV abierta arruina todo lo que venga despues: el click de la
+    pestana siguiente se va a la LOV y las capturas salen todas iguales. Paso
+    de verdad.
+
+    PRUEBA ESC PRIMERO. Se creia que ESC no cerraba las LOV de forma fiable y
+    esta herramienta se escribio por eso; medido en fofertas el 2026-09-04,
+    ESC las cierra sin problema y sale gratis: una tecla, sin medir el boton
+    Cancel ni la X, y encadenable dentro de forms_secuencia. Esta herramienta
+    sigue siendo la buena para MENSAJES y para cuando ESC no responda.
 
     NO es un click a ciegas: primero se detecta el recuadro y su TAMANO dice
     de que tipo es, y de ahi sale la posicion del boton. Medido en SAFIX:
