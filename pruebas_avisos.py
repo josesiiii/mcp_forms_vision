@@ -107,6 +107,51 @@ comprobar("la deteccion de foto repetida sigue antes del retorno",
 comprobar("y el marco no se cuela en el aviso de repetida",
           cap.index("_foto_repetida(") > cap.index("marco ="))
 
+# ── 6. un aviso NORMAL no puede llevar una marca de fallo dentro ────────────
+print("\n6. Los avisos de resultados NORMALES no detienen el lote")
+# Regresion real: el aviso de CAMBIO MENOR se escribio empezando por "OJO:",
+# y 'ojo' esta en marcas_fallo. A partir de ahi CUALQUIER comparacion menor
+# paraba la pasada — un resultado normal abortando el trabajo.
+import winauto as w  # noqa: E402
+
+marcas = [m for m, _ in w.ajustes()["marcas_fallo"]]
+comprobar("'ojo' sigue siendo marca de fallo (la prueba tiene sentido)",
+          "ojo" in marcas)
+
+
+def texto_de(rama, largo=700):
+    """El texto del aviso que sigue a esa rama, SIN los comentarios.
+
+    Los comentarios se quitan porque el que explica esta misma regresion cita
+    la palabra "OJO:" para decir que no se use — y sin quitarlos la prueba
+    senala el comentario que la documenta como si fuera el defecto.
+    """
+    i = cap.find(rama)
+    if i == -1:
+        return ""
+    trozo = cap[i:i + largo]
+    return "\n".join(l for l in trozo.splitlines()
+                     if not l.strip().startswith("#"))
+
+
+for rama, etiqueta in ((' == "CAMBIO MENOR"', "CAMBIO MENOR"),
+                       ("cambia lo que el usuario puede hacer", "ESTRUCTURAL")):
+    t = plano(texto_de(rama)).lower()
+    culpables = [m for m in marcas if m in t]
+    comprobar(f"el aviso de {etiqueta} no contiene ninguna marca de fallo",
+              not culpables, f"encontradas: {culpables}" if culpables else "")
+
+# El de coordenadas se anade a TODA captura: si llevara una marca, ningun lote
+# pasaria de la primera foto.
+t_marco = plano(texto_de("esta imagen ES el canvas", 400)).lower()
+culpables = [m for m in marcas if m in t_marco]
+comprobar("el aviso de coordenadas tampoco (va en TODAS las capturas)",
+          not culpables, f"encontradas: {culpables}" if culpables else "")
+
+# Y el de IDENTICAS SI debe detener: ahi la marca es deseable.
+comprobar("IDENTICAS sigue siendo un aviso que detiene",
+          '_aviso(' in cap.split('d["veredicto"] == "IDENTICAS"')[1][:900])
+
 print("\n" + "=" * 70)
 if fallos:
     print(f"RESULTADO: {len(fallos)} FALLO(S) de {hechas}")

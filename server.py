@@ -561,12 +561,17 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
                         "     Si de verdad no abre, mira si su tabla tiene "
                         "filas antes de llamarlo defecto."))
                 elif d["veredicto"] == "CAMBIO MENOR":
+                    # CUIDADO al redactar esto: 'CAMBIO MENOR' es un resultado
+                    # NORMAL y no debe detener el lote. Se escribio una vez
+                    # empezando por "OJO:", que esta en `marcas_fallo`, y a
+                    # partir de ahi CUALQUIER comparacion menor paraba la
+                    # pasada. Nada de palabras de la lista de marcas aqui.
                     avisos.append(
                         "cambio de uno o dos campos: basta UNA foto; "
                         "el detalle va en el texto del manual.\n"
-                        "     OJO: 'MENOR' NO significa que no pasara nada. En "
-                        "una ventana grande un registro entero cargado da 1,4% "
-                        "y un desplegable abierto 1,2%. Solo IDENTICAS es un "
+                        "     'MENOR' NO significa que no pasara nada: en una "
+                        "ventana grande un registro entero cargado da 1,4% y un "
+                        "desplegable abierto 1,2%. Solo IDENTICAS es un "
                         "negativo fiable.")
                 else:
                     avisos.append("cambia lo que el usuario puede hacer: "
