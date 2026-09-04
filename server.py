@@ -986,10 +986,22 @@ def forms_calibrar(forma: str, canvas: str = "CNV_TAB", tab: str = "",
     salida = (f"Calibrada {forma} · {canvas}/{tab or '(sin tab)'}\n"
               f"  escala {cal['escala']}  off_x {cal['off_x']}  "
               f"off_y {cal['off_y']}\n"
-              f"  {cal['encajes']} de {cal['de']} campos encajan · "
+              f"  {cal['encajes']} de {cal['de']} campos encajan en "
+              f"{cal.get('niveles', '?')} altura(s) distinta(s) · "
               f"residuo medio {cal['residuo']} px\n"
               "  Los que no encajan suelen ser campos deshabilitados: en gris "
               "no hay area blanca que detectar.")
+    # Una sola altura explicada = el desplazamiento en y sigue siendo ambiguo.
+    # Es el caso de la rejilla: 13 filas iguales encajan igual de bien y el
+    # residuo no lo delata. Se dice, en vez de devolver un numero con aire de
+    # certeza.
+    if cal.get("niveles", 0) < 2:
+        salida = _aviso(
+            f"la calibracion encaja en UNA sola altura del .fmb, asi que el "
+            f"off_y ({cal['off_y']}) puede estar desplazado un numero entero de "
+            f"filas y los clicks caerian en la fila de al lado sin dar error. "
+            f"Comprueba un elemento conocido con capturar(comparar_con=...) "
+            f"antes de fiarte.\n" + salida)
     aviso = _contrastar_calibracion(forma, canvas, tab, estado, cal)
     return salida + aviso if not aviso else salida + "\n" + aviso
 

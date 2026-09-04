@@ -114,6 +114,14 @@ def _calibrar(forma, canvas, tab, hwnd, estado=""):
     # ahi forms_cerrar_popup contestaba "delante esta la ventana de datos" con
     # el mensaje encima. Paso el 2026-09-03.
     campos = w.detectar_campos(hwnd, v)
+    # El campo CON EL FOCO se pinta amarillo, no blanco, asi que la deteccion
+    # de campos no lo ve — y es un campo como los demas, con su posicion
+    # declarada en el .fmb. Dejarlo fuera costo la calibracion de fcalifica: el
+    # unico campo de la fila maestra estaba enfocado, se quedo sin detectar, y
+    # sin el la unica referencia era la rejilla (ver la nota de `puntuar`).
+    foco = w.detectar_foco(hwnd, v)
+    if foco is not None:
+        campos = list(campos) + [(foco["x"], foco["y"], foco["ancho"], foco["alto"])]
     if len(campos) < 3:
         return None, _fallo(f"solo {len(campos)} campos blancos detectados; hacen falta "
                       "al menos 3. Puede que la seccion no tenga campos "
@@ -131,32 +139,48 @@ def _calibrar(forma, canvas, tab, hwnd, estado=""):
         return None, _fallo("el .fmb declara menos de 3 campos anchos en esta "
                             "seccion.")
 
+    # Se cuentan los NIVELES de y distintos que encajan, no solo los encajes.
+    #
+    # Una rejilla dibuja en pantalla MUCHAS filas identicas de los mismos items
+    # del .fmb -fcalifica declara 4 columnas en y=86 y se ven 13 filas-, asi que
+    # el ajuste encaja igual de bien alineado con cualquiera de ellas: mismo
+    # numero de aciertos y mismo residuo. Maximizar aciertos no puede desempatar
+    # eso, y elegia una fila cualquiera: salio off_y 58 donde lo correcto era 39
+    # — 19 px, exactamente el alto de una fila — y los clicks caian una fila por
+    # debajo sin un solo error. Es el mismo sintoma que el canvas IMAGENES de
+    # binmueb (27 px con 3 encajes).
+    #
+    # Un ajuste que encaja en DOS alturas distintas del .fmb (la fila maestra y
+    # la rejilla) solo puede estar en un sitio. Por eso el primer criterio es
+    # cuantas alturas distintas se explican.
     def puntuar(escala, ox, oy):
-        aciertos, residuo = 0, 0.0
+        niveles, aciertos, residuo = set(), 0, 0.0
         for x, y, a in esperados:
             px_, py_, pa = ox + x * escala, oy + y * escala, a * escala
             for cx, cy, ca, _ in campos:
                 if abs(cx - px_) <= 3 and abs(cy - py_) <= 4 and abs(ca - pa) <= 30:
                     aciertos += 1
+                    niveles.add(y)
                     residuo += abs(cx - px_) + abs(cy - py_)
                     break
-        return aciertos, (residuo / aciertos if aciertos else 1e9)
+        return len(niveles), aciertos, (residuo / aciertos if aciertos else 1e9)
 
-    mejor = (0, 1e9, None, None, None)
+    mejor = (0, 0, 1e9, None, None, None)
     for e in range(1280, 1400, 5):
         escala = e / 1000.0
         for ox in range(-20, 60):
             for oy in range(20, 130):
-                n, res = puntuar(escala, ox, oy)
-                if n and ((n > mejor[0]) or (n == mejor[0] and res < mejor[1])):
-                    mejor = (n, res, escala, ox, oy)
+                niv, n, res = puntuar(escala, ox, oy)
+                if n and ((niv, n, -res) > (mejor[0], mejor[1], -mejor[2])):
+                    mejor = (niv, n, res, escala, ox, oy)
 
-    n, res, escala, ox, oy = mejor
+    niv, n, res, escala, ox, oy = mejor
     if n < 3 or res > 3:
         return None, _fallo(f"ajuste pobre: {n} encajes con residuo {res:.1f} px. "
                       "No se usa para no pulsar a ciegas.")
     cal = {"escala": escala, "off_x": ox, "off_y": oy,
            "encajes": n, "de": len(esperados), "residuo": round(res, 2),
+           "niveles": niv,
            "fecha": dt.datetime.now().isoformat(timespec="seconds")}
     _calib_guardar(forma, canvas, tab, cal, estado)
     # Ahora si: el ajuste encajo, asi que esta ES la ventana de datos. Se
