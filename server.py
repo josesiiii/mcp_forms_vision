@@ -1016,8 +1016,16 @@ def forms_secuencia(pasos: str) -> str:
         escribir texto=346789097612
 
     Acciones: click · click_item · calibrar · tecla · escribir · esperar ·
-    capturar · cerrar. Lo normal es `calibrar` una vez y luego encadenar
+    capturar · cerrar · mover. Lo normal es `calibrar` una vez y luego encadenar
     `click_item`, que pulsa por NOMBRE del .fmb en vez de por pixel adivinado.
+
+    La foto de una LOV sale mejor apartando el recuadro del campo que lo abrio,
+    para que la etiqueta se vea al lado de la lista:
+
+        tecla combinacion=CTRL+L
+        esperar segundos=3
+        mover x=430 y=10
+        capturar nombre=07_lov_asesor
 
     Para decidir si un control necesita las dos versiones, comparar contra la
     captura de antes:
@@ -1034,7 +1042,8 @@ def forms_secuencia(pasos: str) -> str:
     acciones = {"click": forms_click, "tecla": forms_tecla,
                 "escribir": forms_escribir, "esperar": forms_esperar,
                 "capturar": forms_capturar, "click_item": forms_click_item,
-                "calibrar": forms_calibrar, "cerrar": forms_cerrar_popup}
+                "calibrar": forms_calibrar, "cerrar": forms_cerrar_popup,
+                "mover": forms_mover_popup}
     log = []
     # Quitar la marca de orden de bytes: PowerShell 5.1 escribe UTF-8 CON BOM
     # y el primer paso llegaba como '﻿click', que no coincide con nada.
@@ -1323,6 +1332,94 @@ def _verificar_foco(hwnd, cx, cy, tolerancia=6, espera=0.4):
     return _aviso("foco EQUIVOCADO: el resalte esta en " + donde +
             f", no en ({cx},{cy}). El click no movio el foco: un Ctrl+L ahora "
             "abriria la lista de otro campo. Repite el click o salta el elemento.")
+
+
+@mcp.tool()
+def forms_mover_popup(dx: int = 0, dy: int = 0, x: int = -1, y: int = -1,
+                      hwnd: str = "") -> str:
+    """Mueve el recuadro de encima (LOV, mensaje) arrastrando su barra de titulo.
+
+    ES PARA LA FOTO. Una LOV se abre justo encima del campo que la sirve y lo
+    tapa, con su etiqueta: la foto muestra una lista sin decir DE QUE campo es,
+    y el lector del manual no puede situarla. Moviendola un poco caben las dos
+    cosas en la misma imagen — la etiqueta a la izquierda y la lista al lado —
+    y desaparece la necesidad de una segunda foto para dar contexto.
+
+    Se indica el destino de UNA de estas dos formas:
+
+        dx / dy   desplazamiento desde donde esta ahora
+        x / y     esquina superior izquierda destino, en coordenadas del canvas
+
+    El recuadro se queda SIEMPRE dentro del canvas: un destino que lo sacaria
+    fuera se recorta al borde, porque lo que se sale no se puede fotografiar.
+
+    Despues de mover, las coordenadas de OK, Cancel y la X han cambiado: hay
+    que releerlas de una captura nueva, o cerrar con ESC, que no depende de la
+    posicion. La respuesta trae el rect nuevo para no tener que adivinarlo.
+
+    No mueve la ventana de datos: si lo que hay delante no es un recuadro, lo
+    dice y no toca nada.
+    """
+    h = _resolver(int(hwnd, 0) if hwnd else None)
+    amb, motivo = _ambiente_permitido(h)
+    if motivo:
+        _bitacora(accion="RECHAZADO", detalle="mover: " + motivo[:70],
+                  nivel="falla")
+        return _fallo(f"ambiente no autorizado: {motivo}.")
+    if not w.traer_al_frente(h):
+        return _fallo("no se pudo poner la ventana en primer plano.")
+
+    aj = w.ajustes()
+    v = w.detectar_ventana_reintentando(h)
+    if v is None:
+        return _fallo("no se detecta ningun recuadro que mover.")
+
+    datos = _ventana_datos.get(h)
+    if datos:
+        es_datos = (abs(v["ancho"] - datos[0]) <= 8
+                    and abs(v["alto"] - datos[1]) <= 8)
+    else:
+        es_datos = v["ancho"] >= aj["ancho_datos_respaldo"]
+    if es_datos:
+        return _fallo(f"delante esta la ventana de datos "
+                      f"({v['ancho']}x{v['alto']}), no un recuadro: no se "
+                      f"mueve. Abre la LOV primero.")
+
+    (cl, ct, cr, cb), _ = w.canvas_de(h)
+    ancho_canvas, alto_canvas = cr - cl, cb - ct
+
+    destino_x = v["x"] + dx if x < 0 else x
+    destino_y = v["y"] + dy if y < 0 else y
+    # Recortar contra el canvas. Un recuadro medio fuera no sirve de foto, y
+    # ademas sus botones quedarian donde no se pueden pulsar.
+    destino_x = max(0, min(destino_x, ancho_canvas - v["ancho"]))
+    destino_y = max(0, min(destino_y, alto_canvas - v["alto"]))
+    if (destino_x, destino_y) == (v["x"], v["y"]):
+        return (f"el recuadro ya esta en ({v['x']},{v['y']}) "
+                f"{v['ancho']}x{v['alto']}: no hace falta moverlo.")
+
+    # La barra de titulo: alto conocido del look&feel de SAFIX. Se agarra a un
+    # 35% del ancho para no caer ni en el icono de la izquierda ni en la X de
+    # la derecha, que cerraria el recuadro en vez de moverlo.
+    alto_barra = aj.get("popup_alto_barra", 19)
+    gx = cl + v["x"] + int(v["ancho"] * 0.35)
+    gy = ct + v["y"] + max(4, alto_barra // 2)
+    w.arrastrar(gx, gy, gx + (destino_x - v["x"]), gy + (destino_y - v["y"]))
+    time.sleep(0.6)
+
+    v2 = w.detectar_ventana_reintentando(h)
+    if v2 is None:
+        return _fallo("tras arrastrar no se detecta el recuadro: mira la "
+                      "pantalla antes de seguir.")
+    movido = abs(v2["x"] - v["x"]) > 2 or abs(v2["y"] - v["y"]) > 2
+    if not movido:
+        return _aviso(f"el arrastre no movio el recuadro: sigue en "
+                f"({v2['x']},{v2['y']}). Puede que la barra de titulo no este "
+                f"donde se calculo; lee su posicion de una captura y usa x/y.")
+    _bitacora(accion="MOVER", detalle=f"popup a ({v2['x']},{v2['y']})")
+    return (f"Recuadro movido de ({v['x']},{v['y']}) a ({v2['x']},{v2['y']}), "
+            f"{v2['ancho']}x{v2['alto']}. Las coordenadas de OK/Cancel/X han "
+            f"cambiado: releelas de una captura nueva o cierra con ESC.")
 
 
 @mcp.tool()

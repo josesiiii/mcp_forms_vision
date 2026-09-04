@@ -417,6 +417,27 @@ puede devolver algo, y **verificar** que la que abrió es la que se creía —
 **Una LOV dependiente necesita su padre lleno.** El indicador *List of Values*
 de la barra de estado se enciende solo entonces. Primero el padre.
 
+### Aparta la lista antes de la foto
+
+Una LOV se abre **encima del campo que la sirve** y lo tapa junto con su
+etiqueta. La foto queda con una lista y sin ninguna pista de a qué campo
+corresponde: quien lee el manual no puede situarla. Se aparta con `mover`, y
+entonces la etiqueta y la lista caben en la misma imagen:
+
+```
+tecla combinacion=CTRL+L
+esperar segundos=3
+mover x=430 y=10
+capturar nombre=07_soporte_telefonico_lov_asesor
+```
+
+`x`/`y` es la esquina superior izquierda destino en coordenadas del canvas;
+`dx`/`dy` desplaza desde donde esté. El recuadro nunca se queda medio fuera: un
+destino imposible se recorta al borde.
+
+**Después de mover, `OK`, `Cancel` y la `X` están en otro sitio.** O se releen
+de una captura nueva, o se cierra con `ESC`, que no depende de la posición.
+
 ### Cerrar una lista: dos `ESC`, y cuidado con el click siguiente
 
 El primer `ESC` sale de la caja *Find*; el segundo cierra la lista. Y mientras

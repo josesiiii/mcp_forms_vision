@@ -143,5 +143,7 @@
     0.84
   ],
   "popup_alto_lov": 250,
-  "ancho_datos_respaldo": 600
+  "ancho_datos_respaldo": 600,
+  "_barra": "Alto en pixeles de la barra de titulo de un recuadro de SAFIX. Es por donde forms_mover_popup lo agarra para apartarlo del campo que lo abrio, y que en la misma foto quepan la etiqueta y la lista.",
+  "popup_alto_barra": 19
 }

@@ -204,6 +204,22 @@ explícitas.
 **La posición de una LOV depende del campo que la abre.** Un recorte fijo de la
 zona cortó una foto por la mitad. Para LOVs, canvas completo.
 
+**Y tapa justo el campo que la sirve**, con su etiqueta. La foto sale con una
+lista y sin decir *de qué campo* es, así que el lector del manual no puede
+situarla. Se aparta antes de disparar:
+
+```
+tecla combinacion=CTRL+L
+mover x=430 y=10
+capturar nombre=07_..._lov_asesor
+```
+
+**En la herramienta**: `forms_mover_popup` arrastra el recuadro por su barra de
+título, lo mantiene dentro del canvas y avisa de que `OK`/`Cancel`/`X` han
+cambiado de sitio (`pruebas_mover`). El arrastre va por pasos intermedios: AWT
+decide que hay arrastre viendo el movimiento con el botón pulsado, y un salto
+directo llega como un click en el origen.
+
 **Comparar una LOV contra otra LOV engaña**: dos listas completamente distintas
 dieron 0,99% y 2,74% porque ocupan la misma zona. Se compara contra el estado
 **cerrado**.
@@ -243,8 +259,9 @@ prueba:
 | sección sin control en pantalla | se descarta `SIN CONTROL` (`pruebas_riesgo`) |
 | otra aplicación delante | la captura falla en vez de guardarla (`pruebas_riesgo`) |
 | ventana de datos | ya no se confunde con un recuadro por una medida rancia (`pruebas_riesgo`) |
+| LOV que tapa su campo | se aparta con `mover` y caben etiqueta y lista (`pruebas_mover`) |
 
-**193 comprobaciones** corren sin abrir SAFIX.
+**220 comprobaciones** corren sin abrir SAFIX.
 
 > Se corren con el Python del servidor, no con el del sistema:
 > `%LOCALAPPDATA%\forms-vision-venv\Scripts\python.exe`. Con el otro fallan

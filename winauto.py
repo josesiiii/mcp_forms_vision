@@ -92,6 +92,9 @@ AJUSTES_DEFECTO = {
     # Ancho minimo para tomar un recuadro por la ventana de datos, SOLO cuando
     # todavia no se ha calibrado y no hay tamano aprendido con el que comparar.
     "ancho_datos_respaldo": 600,
+    # Alto de la barra de titulo de un recuadro de SAFIX, en pixeles. Es por
+    # donde se agarra para moverlo con forms_mover_popup.
+    "popup_alto_barra": 19,
     # Ambientes de SAFIX en los que esta herramienta puede actuar.
     #
     # El titulo de la ventana declara el ambiente:
@@ -1021,3 +1024,43 @@ def click(x, y, boton="izquierdo", doble=False):
     if doble:
         time.sleep(0.06)
         _enviar(mi(down), mi(up))
+
+
+def _a_normalizado(x, y):
+    """(x, y) de pantalla -> coordenadas 0..65535 del escritorio virtual."""
+    vx = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
+    vy = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
+    vw = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
+    vh = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    return (int(round((x - vx) * 65535 / max(vw - 1, 1))),
+            int(round((y - vy) * 65535 / max(vh - 1, 1))))
+
+
+def arrastrar(x0, y0, x1, y1, pasos=14, espera=0.02):
+    """Arrastra de (x0,y0) a (x1,y1) en coordenadas absolutas de pantalla.
+
+    Va por PASOS intermedios a proposito. AWT decide que hay un arrastre
+    observando el movimiento con el boton pulsado: un salto directo del origen
+    al destino llega como un click en el origen y la ventana no se mueve. Los
+    dos extremos se mandan aparte del recorrido para que el boton baje despues
+    de que el puntero ya este colocado.
+    """
+    flags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_VIRTUALDESK
+
+    def mi(x, y, extra):
+        nx, ny = _a_normalizado(x, y)
+        return INPUT(type=INPUT_MOUSE,
+                     mi=MOUSEINPUT(dx=nx, dy=ny, mouseData=0,
+                                   dwFlags=flags | extra, time=0, dwExtraInfo=0))
+
+    _enviar(mi(x0, y0, MOUSEEVENTF_MOVE))
+    time.sleep(0.08)
+    _enviar(mi(x0, y0, MOUSEEVENTF_LEFTDOWN))
+    time.sleep(0.10)
+    for i in range(1, max(2, pasos) + 1):
+        t = i / max(2, pasos)
+        _enviar(mi(int(round(x0 + (x1 - x0) * t)),
+                   int(round(y0 + (y1 - y0) * t)), MOUSEEVENTF_MOVE))
+        time.sleep(espera)
+    time.sleep(0.08)
+    _enviar(mi(x1, y1, MOUSEEVENTF_LEFTUP))
