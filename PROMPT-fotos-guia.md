@@ -151,12 +151,28 @@ del resultado lo dice sin necesidad de abrir el PNG.
 
 ## NOMBRES DE ARCHIVO
 
-El nombre es la **ruta de navegación acumulada**, empezando por la pestaña
-(sin el nombre de la forma), en minúscula y con `_`:
+El nombre es el **nombre de la forma** seguido de la **ruta de navegación
+acumulada**, en minúscula y con `_`:
 
 ```
-NN_<pestaña>_<radio/panel>_<prefijo>_<elemento>.png
+NN_<forma>_<pestaña>_<radio/panel>_<prefijo>_<elemento>.png
 ```
+
+`<forma>` es el **título que la forma muestra en su barra**, no el código del
+`.fmb`: `Calificaciones Portafolio de Inversiones` →
+`calificaciones_portafolio_de_inversiones`. Va en **todas** las fotos, aunque
+la carpeta ya se llame igual — las imágenes se sacan de la carpeta para pegarlas
+en el manual, y allí el nombre del archivo es lo único que queda.
+
+Si la forma no tiene pestañas, ese segmento no existe y detrás del nombre va
+directamente la sección o el elemento:
+
+```
+01_calificaciones_portafolio_de_inversiones_principal.png
+02_calificaciones_portafolio_de_inversiones_select_list_tipo.png
+```
+
+> Regla añadida el 2026-09-04. Las fotos tomadas antes no la llevan.
 
 | Prefijo | Para | Se reconoce por `parent_name` |
 |---|---|---|
@@ -235,12 +251,14 @@ la etiqueta es una tilde perdida (uno al final es legítimo: `Inconsistencias?`)
 El plan marca esos como `<leer_en_pantalla>`; si se dejan pasar, el archivo sale
 `lov_dise_o`.
 
+Con el nombre de la forma delante (aquí *Bien Inmueble*):
+
 ```
-01_principal.png                        si la forma tiene una sola sección
-01_basica_principal.png                 si hay varias pestañas
-02_basica_select_list_departamento.png
-03_basica_radio_btn_avaluos.png
-04_basica_radio_btn_avaluos_select_list_avaluador.png
+01_bien_inmueble_principal.png                        una sola sección
+01_bien_inmueble_basica_principal.png                 si hay varias pestañas
+02_bien_inmueble_basica_select_list_departamento.png
+03_bien_inmueble_basica_radio_btn_avaluos.png
+04_bien_inmueble_basica_radio_btn_avaluos_select_list_avaluador.png
 ```
 
 ### El estado va en la ruta, como un segmento más
