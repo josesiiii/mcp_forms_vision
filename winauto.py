@@ -92,6 +92,18 @@ AJUSTES_DEFECTO = {
     # Ancho minimo para tomar un recuadro por la ventana de datos, SOLO cuando
     # todavia no se ha calibrado y no hay tamano aprendido con el que comparar.
     "ancho_datos_respaldo": 600,
+    # Ambientes de SAFIX en los que esta herramienta puede actuar.
+    #
+    # El titulo de la ventana declara el ambiente:
+    #     Administracion del Sistema [XENCO/Safix@SAFIXDEMOS/2026-09]
+    #                                              ^^^^^^^^^^
+    # Hasta ahora la separacion de ambientes era una advertencia en el README.
+    # Una advertencia no es un control: no impide nada. Ahora se lee el titulo
+    # y se RECHAZA actuar si el ambiente no esta en esta lista.
+    #
+    # Falla CERRADO: si el ambiente no se puede leer, tampoco se actua. Es la
+    # misma regla que el proyecto ya exige en PL/SQL (OWASP A10).
+    "ambientes_permitidos": ["SAFIXDEMOS"],
     "verbos_peligrosos": [
         "COMMIT", "DELETE_RECORD", "FORMS_DDL", "PU_HEREDAR",
         "CREAR_ENCUESTA", "RUN_PRODUCT", "APU_REPORTES",
@@ -291,6 +303,26 @@ def ventanas_java():
 
     user32.EnumWindows(ENUMPROC(cb), 0)
     return found
+
+
+def ambiente_de(titulo):
+    """El ambiente que DECLARA el titulo de la ventana de SAFIX, o None.
+
+    El frame de SAFIX rotula el ambiente en su titulo:
+
+        Administracion del Sistema [XENCO/Safix@SAFIXDEMOS/2026-09]
+
+    Se lee de ahi y no de la configuracion a proposito: la configuracion dice
+    a que ambiente se QUISO apuntar, el titulo dice en cual se esta de verdad.
+    Un control que se cree la configuracion no protege de una sesion abierta
+    por error contra otra base.
+
+    Devuelve None si el titulo no lo declara — y quien llame debe tratar eso
+    como "no autorizado", no como "adelante".
+    """
+    import re as _re
+    m = _re.search(r"@([A-Za-z0-9_.\-]+)", titulo or "")
+    return m.group(1).upper() if m else None
 
 
 def canvas_de(hwnd):

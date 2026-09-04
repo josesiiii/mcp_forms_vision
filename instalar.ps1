@@ -100,9 +100,15 @@ Write-Host ""
 Write-Host "Luego comprueba:"
 Write-Host "  cd `"$local`""
 Write-Host "  `$env:FORMS_VISION_PROYECTO = `"$Proyecto`""
-Write-Host "  & `"$py`" pruebas_deteccion.py    # 19 comprobaciones, sin SAFIX"
-Write-Host "  & `"$py`" pruebas_ajustes.py      # 16 comprobaciones, sin SAFIX"
+# Las suites se enumeran leyendo la carpeta, igual que $fuentes: la lista
+# escrita a mano ya se quedo atras una vez -no mencionaba pruebas_contrato ni
+# pruebas_ambiente- y una comprobacion que nadie sabe que existe no comprueba.
+Get-ChildItem $PSScriptRoot -File -Filter "pruebas_*.py" |
+    Sort-Object Name |
+    ForEach-Object { Write-Host ("  & `"$py`" {0,-24}# sin SAFIX" -f $_.Name) }
 Write-Host "  & `"$py`" verificar_entorno.py    # entorno + captura real"
 Write-Host ""
 Write-Host "Y no lo olvides: esta herramienta inyecta entrada REAL y maneja una"
-Write-Host "sesion de SAFIX en vivo. Usala contra SAFIXDEMOS."
+Write-Host "sesion de SAFIX en vivo. El control A.8.31 solo la deja actuar en los"
+Write-Host "ambientes de ajustes.json, y para leer el ambiente SAFIX necesita el"
+Write-Host "inicio de sesion completo con empresa y periodo. Ver SEGURIDAD.md."

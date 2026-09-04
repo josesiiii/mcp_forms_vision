@@ -9,13 +9,31 @@ forma, y navegar por ella (clicks, texto, teclas).
 > del teclado de verdad, porque AWT ignora los mensajes sintéticos. Un click
 > mal calculado pulsa lo que haya en ese píxel.
 >
-> **Úsala contra `SAFIXDEMOS`, nunca contra producción.**
+> **Solo actúa en los ambientes de `ambientes_permitidos`** —`SAFIXDEMOS` de
+> fábrica—. Esto ya no es un consejo del README: lee el ambiente del título de
+> la ventana y **rechaza** todo lo demás, incluida la captura. Falla **cerrado**:
+> si no puede leer el ambiente, no actúa.
 >
 > Guardas que trae puestas: `F10` y `CTRL+S` bloqueadas, se niega a pulsar
 > botones cuyo `WHEN-BUTTON-PRESSED` contiene `COMMIT`/`RUN_PRODUCT`/`DELETE`,
 > no inyecta nada si la ventana no logra ponerse en primer plano, y ante
 > *«¿Desea salvar los cambios?»* la respuesta correcta es siempre **No**.
-> Ninguna sustituye a trabajar en un ambiente de pruebas.
+>
+> Los controles técnicos y —más importante— **los que una herramienta no puede
+> implementar** están en [SEGURIDAD.md](SEGURIDAD.md).
+
+### Precondición: SAFIX tiene que declarar el ambiente
+
+El control anterior lee el ambiente de títulos como
+`Administración del Sistema [XENCO/Safix@SAFIXDEMOS/2026-09]`. SAFIX **solo
+rotula así una vez completado el inicio de sesión con empresa y período**; antes
+de eso el título es `XENCO - Administracion del Sistema` y no declara nada, así
+que la herramienta se niega a trabajar.
+
+No es un defecto: es no actuar sin saber contra qué base se trabaja. Completa el
+inicio de sesión antes de empezar. `forms_ventanas` —la única herramienta sin
+restricción, porque para saber dónde estás hay que poder mirar— dice qué
+ambiente ve.
 
 ## Por qué está hecho así
 
@@ -64,11 +82,12 @@ extract no anunció, se anota y se continúa con el resto.
 ## Las capas
 
 ```
-winauto.py    807   Win32, pixeles, ajustes            no sabe nada de MCP
-nucleo.py     104   configuracion, extract, contrato   depende solo de winauto
+winauto.py    833   Win32, pixeles, ajustes            no sabe nada de MCP
+nucleo.py     143   configuracion, extract, contrato   depende solo de winauto
+                    ambiente permitido (A.8.31)
 plan.py       366   planificacion desde el .fmb        no toca la forma
 calibra.py    168   calibracion .fmb -> pixel
-server.py    1075   las 15 herramientas MCP
+server.py    1143   las 15 herramientas MCP
 ```
 
 Cada capa depende solo de las de abajo. `nucleo.py` existe justamente para
@@ -77,7 +96,7 @@ romper el círculo: si la configuración y el contrato vivieran en `server.py`,
 
 El servidor MCP se declara **solo** en `server.py`, así que `plan` y `calibra`
 se pueden importar desde una prueba sin levantar nada de MCP — que es lo que
-permite que 51 de las comprobaciones corran sin sesión de Forms.
+permite que las 67 comprobaciones corran sin sesión de Forms.
 
 ### El contrato de éxito y fallo
 
@@ -145,14 +164,22 @@ se clasificaba distinto según dónde ocurriera.
 ## Bitácora
 
 Cada captura y cada `click_item` dejan una línea en
-`_capturas/_bitacora/<fecha>.log` con la hora, lo que se pidió y los avisos.
-Una corrida de ~90 fotos es larga y desatendida: sin registro no hay forma de
-saber después qué salió y qué quedó a medias. Se cambia con
-`FORMS_VISION_BITACORA`.
+`_capturas/_bitacora/<fecha>.log` con la hora, el **usuario de Windows**, el
+**pid** del servidor, el **ambiente**, lo que se pidió y los avisos. Los rechazos
+por ambiente quedan también, marcados `XX`. Una corrida de ~90 fotos es larga y
+desatendida: sin registro no hay forma de saber después qué salió y qué quedó a
+medias. Se cambia con `FORMS_VISION_BITACORA`.
+
+La escritura del registro se traga sus errores —tumbar una captura por no poder
+anotarla sería peor— pero **los anota y los expone**: `forms_ventanas` muestra
+siempre la ruta, porque el modo de fallo real no es una excepción sino escribir
+en el sitio equivocado sin quejarse. Eso pasó de verdad: una prueba con una
+raíz inexistente creó un árbol entero en `Z:\NoExisteEsteProyecto\` sin un solo
+error.
 
 ## Ajustes — lo que se afina sin reiniciar
 
-Nueve valores viven en `ajustes.json` y se releen **en cada llamada**, con
+Trece valores viven en `ajustes.json` y se releen **en cada llamada**, con
 caché por fecha de modificación. Son justo los que se afinan probando:
 
 | Ajuste | Qué decide |
@@ -165,6 +192,12 @@ caché por fecha de modificación. Son justo los que se afinan probando:
 | `rejilla_minima` | desde cuántas casillas un panel es una rejilla de selección |
 | `encajes_fiables` | cuántos encajes hacen fiable una calibración propia |
 | `verbos_peligrosos` | qué hace que un botón sea NO TOCAR |
+| `ambientes_permitidos` | **en qué ambientes se permite actuar** (A.8.31) |
+| `popup_lov_cancel` · `popup_mensaje_aceptar` | dónde está el botón que cierra cada recuadro |
+| `popup_alto_lov` · `ancho_datos_respaldo` | las medidas que distinguen un recuadro de la ventana de datos |
+
+Dejar `ambientes_permitidos` **vacío inhabilita la herramienta a propósito**: una
+lista vacía no significa «todos». Es la única forma de apagarla sin desinstalar.
 
 El archivo **aguanta que se edite mal**: si falta, no es JSON válido, trae una
 clave desconocida o un tipo equivocado, se usan los valores de respaldo que
@@ -177,15 +210,21 @@ corrida de 90 fotos sería peor que el reinicio que evita.
 python pruebas_deteccion.py      # 19 comprobaciones, sin sesión de Forms
 python pruebas_ajustes.py        # 16 comprobaciones, sin sesión de Forms
 python pruebas_contrato.py       # 16 comprobaciones, sin sesión de Forms
+python pruebas_ambiente.py       # 16 comprobaciones, sin sesión de Forms
 python verificar_entorno.py      # entorno + captura real
 ```
 
-**51 comprobaciones corren sin abrir SAFIX.** Dos de ellas no comprueban un
+**Las 67 comprobaciones corren sin abrir SAFIX.** Dos de ellas no comprueban un
 resultado sino el **código**: `pruebas_contrato.py` audita las cuatro capas
 buscando retornos de fallo sin token, y `pruebas_ajustes.py` compara las claves
 contra `AJUSTES_DEFECTO` en vez de contra un número fijo — porque una prueba
 que hay que editar cada vez que el código crece acaba fallando por estar vieja,
 no por un defecto.
+
+`pruebas_ambiente.py` demuestra que el control de ambientes **impide** en vez de
+avisar, y lo hace **sustituyendo la lectura del título** por títulos de prueba,
+uno de ellos de producción. Comprobar un control de separación de entornos
+entrando en producción sería el incidente que el control evita.
 
 `pruebas_deteccion.py` sintetiza las imágenes que necesita, así que corre en
 cualquier momento. Existe porque lo que verifica está puesto para cazar fallos
@@ -220,13 +259,21 @@ python 06-frontend/forms/extraer_forma.py <ruta>/<forma>.xml
 
 ## Guardas
 
+- **Solo se actúa en los ambientes autorizados.** El ambiente se lee del título
+  de la ventana —no de la configuración: la configuración dice a qué ambiente se
+  *quiso* apuntar, el título dice en cuál se *está*— y lo comprueba
+  `_exigir_frente`, por donde pasa toda inyección de entrada, más `forms_capturar`.
+  Falla cerrado. La única herramienta sin restricción es `forms_ventanas`, que
+  solo mira.
 - Ninguna tecla ni click se inyecta si la ventana de Forms no logra ponerse en
   primer plano. Evita escribir en la aplicación equivocada.
 - `F10` y `CTRL+S` están **bloqueadas** por defecto: son candidatas a confirmar
   o guardar contra la base de datos. Es una precaución de esta herramienta, no
   una regla de Forms — se cambia con `FORMS_VISION_TECLAS_BLOQUEADAS` en
   `.mcp.json`.
-- La sesión que se maneja es una sesión **real**. Úsala contra `SAFIXDEMOS`.
+- La sesión que se maneja es una sesión **real**, y las capturas contienen los
+  **datos reales** que estuvieran a la vista. Eso no lo resuelve el código: es
+  el riesgo abierto que documenta [SEGURIDAD.md](SEGURIDAD.md).
 
 ### El semáforo de la barra — qué significa de verdad
 

@@ -43,6 +43,47 @@ TECLAS_BLOQUEADAS = {
 w.set_dpi_awareness()
 
 
+# ── separacion de ambientes ──────────────────────────────────────────────────
+#
+# Anexo A 8.31 de ISO/IEC 27001:2022 — separacion de los entornos de
+# desarrollo, prueba y produccion. Hasta ahora esto era una frase en el README,
+# y una advertencia no impide nada: cualquier click habria entrado igual en
+# produccion.
+#
+# El control lee el ambiente del TITULO de la ventana, no de la configuracion:
+# la configuracion dice a que ambiente se quiso apuntar, el titulo dice en cual
+# se esta. Y falla CERRADO — si no se puede leer, no se actua.
+#
+# Deja pasar solo la INSPECCION (forms_ventanas), porque para saber en que
+# ambiente estas hay que poder mirar. Todo lo que inyecte entrada o capture
+# pantalla pasa por aqui.
+
+def _ambiente_permitido(hwnd):
+    """(ambiente, motivo). El motivo es None si se puede actuar."""
+    titulo = w._texto(hwnd)
+    amb = w.ambiente_de(titulo)
+    permitidos = [a.strip().upper()
+                  for a in w.ajustes()["ambientes_permitidos"] if a.strip()]
+    if not permitidos:
+        return amb, ("no hay ningun ambiente permitido en ajustes.json: la "
+                     "herramienta queda inhabilitada a proposito")
+    if amb is None:
+        # Medido el 2026-09-04: SAFIX solo rotula el ambiente en el titulo una
+        # vez completado el inicio de sesion con empresa y periodo. Antes de
+        # eso el titulo es "XENCO - Administracion del Sistema" y no dice nada.
+        # Es una precondicion de trabajo, no un fallo del control.
+        return None, (
+            f"el titulo de la ventana no declara el ambiente ({titulo[:52]!r}). "
+            "No se actua sin saber contra que base se trabaja. SAFIX lo rotula "
+            "-como [XENCO/Safix@AMBIENTE/periodo]- cuando el inicio de sesion "
+            "esta completo con empresa y periodo: complétalo y reintenta")
+    if amb not in permitidos:
+        return amb, (
+            f"la sesion esta en el ambiente '{amb}' y solo se permite actuar "
+            f"en {', '.join(permitidos)}. Esta herramienta inyecta entrada "
+            "real: no toca un ambiente no autorizado")
+    return amb, None
+
 
 def _extract_de(forma):
     """Localiza la carpeta _extract_<forma>_fmb producida por extraer_forma.py."""

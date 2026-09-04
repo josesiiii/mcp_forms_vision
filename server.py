@@ -51,8 +51,8 @@ import winauto as w
 
 
 from nucleo import (JNLP, PROYECTO, RAIZ, SALIDA, TECLAS_BLOQUEADAS,
-                    TOKEN_AVISO, TOKEN_FALLO, _aviso, _cargar_items,
-                    _extract_de, _es_fallo, _fallo, _num)
+                    TOKEN_AVISO, TOKEN_FALLO, _ambiente_permitido, _aviso,
+                    _cargar_items, _extract_de, _es_fallo, _fallo, _num)
 import plan
 import calibra
 from plan import (_analizar_rutas, _clasificar, _clase_control,
@@ -100,6 +100,16 @@ def _resolver(hwnd=None):
 
 
 def _exigir_frente(hwnd):
+    # ISO/IEC 27001:2022 A.8.31 — separacion de ambientes. Se comprueba ANTES
+    # de traer la ventana al frente: no hay razon para tocar una sesion en la
+    # que no se puede actuar. Es el paso obligado de todo lo que inyecta
+    # entrada, asi que el control esta en un solo sitio.
+    amb, motivo = _ambiente_permitido(hwnd)
+    _AMBIENTE_VISTO["v"] = amb or "sin-declarar"
+    if motivo:
+        _bitacora(accion="RECHAZADO", detalle=f"entrada: {motivo[:70]}",
+                  nivel="falla")
+        raise RuntimeError(f"AMBIENTE NO AUTORIZADO: {motivo}.")
     if w.traer_al_frente(hwnd):
         return
     if w.escritorio_bloqueado():
@@ -132,6 +142,28 @@ BITACORA = os.environ.get(
     "FORMS_VISION_BITACORA",
     os.path.join(SALIDA, "_bitacora"))
 
+# Quien y donde, para el registro de eventos (A.8.15). El usuario sale del
+# entorno de Windows: no hay autenticacion propia en esta herramienta, y
+# pretender que la hay seria peor que no tenerla.
+_QUIEN = os.environ.get("USERNAME") or os.environ.get("USER") or "?"
+_PID = os.getpid()
+# Ultimo ambiente comprobado, para que cada linea diga contra que base se
+# actuo sin volver a leer el titulo en cada anotacion.
+_AMBIENTE_VISTO = {"v": "sin-verificar"}
+
+# Ultimo fallo al ESCRIBIR la bitacora.
+#
+# La escritura se traga sus excepciones a proposito: una captura no debe morir
+# porque el log falle. Pero tragarlas EN SILENCIO significaba que la bitacora
+# podia estar sin escribir nada y la herramienta seguir diciendo que todo iba
+# bien — paso: la ruta apuntaba a una carpeta inexistente y se perdieron todas
+# las anotaciones sin una sola senal.
+#
+# Para A.8.15 eso es un defecto del control, no un detalle: un registro cuyo
+# fallo no se puede detectar no sirve como registro. Asi que se traga, pero se
+# ANOTA, y forms_ventanas lo saca a la vista.
+_BITACORA_FALLO = {"v": ""}
+
 
 def _bitacora(accion, detalle="", resultado="", avisos=None, nivel="ok"):
     """Anota una linea por accion en un .log del dia.
@@ -140,21 +172,35 @@ def _bitacora(accion, detalle="", resultado="", avisos=None, nivel="ok"):
     registro no hay forma de saber DESPUES que se pidio, que salio y que
     quedo a medias. Escribir la bitacora no debe poder tumbar una captura,
     asi que cualquier fallo aqui se traga a proposito.
+
+    ISO/IEC 27001:2022 A.8.15 — registro de eventos. Cada linea lleva QUIEN
+    (usuario de Windows), en QUE SESION (pid del servidor, para separar dos
+    corridas del mismo dia) y CONTRA QUE AMBIENTE. Un registro que no dice
+    quien ni donde no sirve para reconstruir lo que paso, que es justo para lo
+    que se pide un registro.
     """
     try:
         os.makedirs(BITACORA, exist_ok=True)
         ruta = os.path.join(BITACORA, f"{dt.date.today().isoformat()}.log")
         marca = {"ok": "  ", "aviso": "! ", "falla": "XX"}.get(nivel, "  ")
-        linea = (f"{dt.datetime.now():%H:%M:%S} {marca} {accion:<14} "
-                 f"{detalle}")
+        linea = (f"{dt.datetime.now():%H:%M:%S} {marca} "
+                 f"{_QUIEN} pid={_PID} {_AMBIENTE_VISTO['v']:<12} "
+                 f"{accion:<14} {detalle}")
         if resultado:
             linea += f"  -> {os.path.basename(str(resultado))}"
         with open(ruta, "a", encoding="utf-8") as f:
             f.write(linea + "\n")
             for a in (avisos or []):
                 f.write(f"{'':>9} ..  {a}\n")
-    except Exception:
-        pass
+        _BITACORA_FALLO["v"] = ""
+    except Exception as e:
+        # Se traga para no tumbar la captura, pero queda anotado y visible.
+        _BITACORA_FALLO["v"] = f"{type(e).__name__}: {e}"
+
+
+def bitacora_estado():
+    """(ruta, problema). El problema es cadena vacia si la bitacora escribe."""
+    return BITACORA, _BITACORA_FALLO["v"]
 
 
 
@@ -176,11 +222,29 @@ def forms_ventanas() -> str:
         return _fallo("no hay ventanas de Forms visibles.")
 
     out = []
+    # A.8.15: la RUTA de la bitacora se muestra SIEMPRE, no solo cuando hay
+    # error. El modo de fallo real no es una excepcion: es escribir en el sitio
+    # equivocado sin queja. Con FORMS_VISION_SALIDA sin declarar, la ruta se
+    # deduce y `os.makedirs` crea alegremente un arbol entero donde no debia —
+    # medido: se creo Z:\NoExisteEsteProyecto\06-frontend\... y el registro
+    # quedo ahi. Un control de registro tiene que decir DONDE registra.
+    ruta_log, problema_log = bitacora_estado()
+    out.append(f"bitacora : {ruta_log}")
+    if problema_log:
+        out.append(f"{TOKEN_AVISO} la bitacora NO escribe ({problema_log}).")
+    out.append("")
     for v in wins:
         (cl, ct, cr, cb), _ = w.canvas_de(v["hwnd"])
+        amb, motivo = _ambiente_permitido(v["hwnd"])
         lineas = [f"hwnd=0x{v['hwnd']:X}  pid={v['pid']}  {v['clase']}",
                   f"  titulo : {v['titulo']}",
+                  f"  ambiente: {amb or '(el titulo no lo declara)'}"
+                  + ("   AUTORIZADO" if not motivo else "   NO AUTORIZADO"),
                   f"  frame  : {v['rect']}  ({v['ancho']}x{v['alto']} px)"]
+        if motivo:
+            lineas.append(f"  {TOKEN_FALLO} {motivo}.")
+            lineas.append("  Solo se permite inspeccionar. Ni capturas ni "
+                          "clicks ni teclas.")
         if v.get("minimizada"):
             lineas.append("  MINIMIZADA — forms_foco la restaura")
         else:
@@ -356,6 +420,15 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
             caza el caso en que el control NO se movio.
     """
     h = _resolver(int(hwnd, 0) if hwnd else None)
+    # A.8.31 + A.8.12: una captura de un ambiente no autorizado saca datos de
+    # ese ambiente a un PNG que acaba en un manual. Se comprueba igual que la
+    # inyeccion de entrada.
+    amb, motivo = _ambiente_permitido(h)
+    _AMBIENTE_VISTO["v"] = amb or "sin-declarar"
+    if motivo:
+        _bitacora(accion="RECHAZADO", detalle="captura: " + motivo[:70],
+                  nivel="falla")
+        return _fallo(f"ambiente no autorizado: {motivo}.")
     if not w.traer_al_frente(h):
         if w.escritorio_bloqueado():
             return _fallo("la sesión de Windows está BLOQUEADA: solo se capturaria la "

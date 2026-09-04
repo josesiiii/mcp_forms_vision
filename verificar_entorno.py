@@ -95,12 +95,32 @@ print(f"  SALIDA   : {server.SALIDA}")
 print(f"  JNLP     : {server.JNLP}")
 print(f"  bloqueadas: {', '.join(sorted(server.TECLAS_BLOQUEADAS)) or '(ninguna)'}")
 
+print(f"  bitacora : {server.BITACORA}")
+
 if PROYECTO_DECLARADO:
     ok("FORMS_VISION_PROYECTO declarada")
 else:
     aviso("FORMS_VISION_PROYECTO no esta declarada",
           "la raiz se dedujo; corre con la misma variable que .mcp.json o los "
           "chequeos de extracts no valen")
+
+# ISO/IEC 27001:2022 A.8.31 y A.8.15. Se comprueban aqui porque son los dos
+# controles que, mal configurados, no dan sintoma hasta que ya se actuo sobre
+# el ambiente equivocado o se perdio el registro de una corrida entera.
+_permitidos = w.ajustes()["ambientes_permitidos"]
+if _permitidos:
+    ok("A.8.31 ambientes en los que se permite actuar",
+       ", ".join(_permitidos))
+else:
+    aviso("A.8.31 la lista de ambientes permitidos esta VACIA",
+          "la herramienta rechazara actuar en cualquier ambiente")
+
+if os.path.isdir(server.BITACORA):
+    ok("A.8.15 la carpeta de bitacora existe")
+else:
+    aviso("A.8.15 la carpeta de bitacora aun no existe",
+          "se crea al primer registro; comprueba que la ruta de arriba sea la "
+          "esperada y no una deducida")
 
 if os.path.isdir(server.PROYECTO):
     ok("la raiz del proyecto existe")
@@ -261,6 +281,14 @@ else:
                     os.remove(ruta_png)
                 except OSError:
                     pass
+            elif "no declara el ambiente" in r:
+                # A.8.31 rechazando por precondicion de sesion, no por defecto.
+                aviso(f"captura {etiqueta} RECHAZADA por A.8.31",
+                      "el titulo no declara el ambiente: completa el inicio "
+                      "de sesion con empresa y periodo")
+            elif "ambiente no autorizado" in r:
+                falla(f"captura {etiqueta} RECHAZADA por A.8.31",
+                      r.split(":", 1)[-1].strip()[:96])
             elif "No se pudo detectar la ventana activa" in r:
                 aviso(f"captura {etiqueta} sin ventana de datos",
                       "abre la forma a fotografiar dentro de SAFIX")
