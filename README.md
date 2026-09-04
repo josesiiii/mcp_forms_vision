@@ -281,9 +281,9 @@ e imprime el JSON exacto para el panel *Servidores MCP locales* de la app.
 | el intérprete | `%LOCALAPPDATA%\forms-vision-venv\` | un venv en red es tan lento que el `pip install` no termina |
 | **los datos** — extracts, fotos, pendientes | donde apunte `FORMS_VISION_PROYECTO` | ahí viven y ahí los espera el equipo |
 
-Aquí `Z:` es `\\10.1.1.18\proyectos`, de ahí la separación. En una máquina con
-el repo en disco local da igual, pero el instalador hace lo mismo: una sola
-forma de instalar, sin casos especiales.
+En el equipo donde se desarrolló, `Z:` es un recurso de red compartido, de ahí
+la separación. En una máquina con el repo en disco local da igual, pero el
+instalador hace lo mismo: una sola forma de instalar, sin casos especiales.
 
 ### Lo que NO se versiona, y por qué
 

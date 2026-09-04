@@ -7,8 +7,8 @@
 #
 # Por que copiar el codigo a local en vez de ejecutarlo desde el repo: el
 # servidor MCP arranca en CADA llamada. Si el repo vive en un recurso de red
-# -el caso aqui, Z: es \\10.1.1.18\proyectos- eso cruza la red constantemente.
-# El venv, ademas, en red es tan lento que el 'pip install' no termina.
+# -el caso donde se desarrollo- eso cruza la red constantemente. El venv,
+# ademas, en red es tan lento que el 'pip install' no termina.
 #
 # Los DATOS (extracts, fotos, pendientes) SI se quedan en la red: ahi viven y
 # ahi los espera el equipo. Solo baja el codigo.
