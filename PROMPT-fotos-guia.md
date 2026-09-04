@@ -12,6 +12,102 @@
 
 ---
 
+## PASO 0 — ¿ABRE LA FORMA? (antes de cualquier otra cosa)
+
+Lo primero, siempre, es **abrirla y mirar**. No se planifica, ni se calibra, ni
+se consulta nada hasta saber si la forma arranca.
+
+```
+abre  -> se hace el proceso completo
+NO abre -> se documenta y se CANCELA en el acto
+```
+
+**Un solo intento.** Si al lanzarla sale un error o un aviso de que no existe
+—p.ej. `Error executing module: <fgeninte>`— se anota el mensaje **literal** en
+`Pendientes de fotos guías/<Modulo>/<FORMA>/<FORMA>.txt` y se abandona esa
+forma hasta nuevo aviso. Nada de reintentos, nada de diagnosticar por qué, nada
+de comprobar `.fmx` ni permisos: eso es gastar recursos en una forma que ya se
+descartó. Regla del usuario, 2026-09-04.
+
+Medido ese mismo día en Portafolio: abrieron `fclasinv` y `femisore`; fallaron
+`fgeninte`, `finterfa` y `finversi` con el mismo mensaje. El corte fue de
+entorno (despliegue en el servidor de Forms), no de la política.
+
+> El mensaje de error **sale duplicado**: hay que pulsar *Aceptar* dos veces.
+> Mientras quede uno en pantalla, la caja de lanzamiento no acepta teclado y
+> parece bloqueada cuando lo único que hay es un modal encima.
+
+### Cómo se lanza una forma
+
+Por su **código**, en la caja de texto de la barra de SAFIX. Es lo **único**
+de esa barra que se toca: el resto de la barra —binóculo, guardar, duplicar
+registro, borrar— queda fuera de límites (regla del usuario, 2026-09-04). El
+equivalente de teclado del binóculo es `Ctrl+F11` (*Registros → Ejecutar
+Consulta*), y en el mismo menú está *Limpiar Forma* para salir de un estado
+sucio.
+
+La caja **conserva el código anterior** y hay que vaciarla antes de escribir.
+Ni `Ctrl+A` ni `Ctrl+Shift+→` seleccionan el texto cuando las teclas se
+inyectan: se probaron las dos y el código nuevo acabó insertado en medio
+(`…eninteFMOVIMIE`). Lo que sí funciona:
+
+```
+click en la caja
+HOME
+BACKSPACE  x30        (la vacia; sobran, no molestan)
+escribir el codigo
+ENTER
+```
+
+Todo eso cabe en **una sola** llamada a `forms_secuencia`, y con `capturar` al
+final para ver si abrió. Verificar la caja antes de `ENTER` solo hace falta si
+el borrado no se hizo en la misma tanda.
+
+## LO QUE NO SE REPITE — reglas de gasto
+
+Este proceso se corre sobre decenas de formas, así que lo repetido cuesta de
+verdad. Tres cosas que medimos gastando de más:
+
+**Una lista fotografiada no se vuelve a abrir.** Dos LOV distintas del `.fmb`
+pueden pintar la MISMA lista: en `fmovimie`, `CGFK$CUENTAS` y
+`LOV_TCPLANCUENTAS` dan las mismas 2.768 filas de *Plan de Cuentas*. Antes de
+abrir una LOV, comprobar si su lista ya está en la carpeta. `forms_capturar`
+ahora lo detecta al guardar: si la foto sale idéntica a otra de la misma
+carpeta **no la guarda** y devuelve un `[AVISO]` con el nombre de la que ya
+existe. Eso corta el lote, que es lo que se quiere.
+
+**No se abre el PNG para comprobar que sirve.** El resultado de
+`forms_capturar` ya dice el tamaño, si salió negra o plana, si la barra de
+título quedó completa y —con `comparar_con`— cuánto cambió la pantalla. Abrir
+la imagen solo hace falta cuando hay que **leer** algo de ella: el nombre de
+una etiqueta, el título de una LOV, cuántos valores trae. Para todo lo demás,
+el texto del resultado basta.
+
+**El icono de un botón se saca con `escala`, no con tres viajes.**
+`forms_capturar(x=…, y=…, ancho=34, alto=32, escala=5)` guarda el icono ya
+ampliado y sin el aviso de recorte minúsculo. Antes eran tres llamadas por
+icono: capturar, ampliar por fuera con PIL, y volver a guardar.
+
+### Orden que ahorra pasadas
+
+```
+1  abrir la forma                    -> ¿abre? si no, documentar y cancelar
+2  forms_plan                        -> secciones, LOVs, botones NO TOCAR
+3  contar filas en la BD             -> decide si merece la pena cargar registro
+4  forms_calibrar                    -> y mirar cuantas ALTURAS encajan
+5  pasada UNICA en registro nuevo    -> LOVs y desplegables (aqui SI abren)
+6  pasada con registro, solo si hay datos que ver
+7  paneles y pestanas, con comparar_con entre consecutivas
+8  iconos con escala=5
+9  forms_pendientes + los hallazgos de ejecucion
+```
+
+El paso 3 es el que más pasadas ahorra: si las tablas del detalle están
+vacías, la pasada con registro no aporta nada y se hace **una sola**. Con
+`fmovimie` se comprobó primero (`TFMOVIMIENTOS` y sus dos detalles a 0 filas) y
+se hizo una única pasada; con `femisore` no se comprobó antes y se gastaron
+varios intentos de consulta que nunca podían devolver nada.
+
 ## CONTEXTO
 
 Vas a tomar las capturas que necesita el manual de usuario de una forma de

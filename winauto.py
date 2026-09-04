@@ -868,19 +868,29 @@ def diferencia_png(ruta_a, ruta_b, umbral=24,
             "caja": caja, "tamano": a.size}
 
 
-def capturar_region(left, top, width, height, destino):
+def capturar_region(left, top, width, height, destino, escala=1.0):
     """Guarda un PNG de la region de pantalla indicada.
 
     Devuelve (ruta, ancho, alto, diagnostico) donde `diagnostico` es una
     lista de avisos legibles. La idea es que quien llama NO tenga que abrir
     la imagen para saber si sirve: abrir cada PNG para verificarlo era el
     mayor gasto de contexto del proceso.
+
+    `escala` amplia la imagen antes de guardarla. Existe porque el icono de un
+    boton mide 24x22 px y a ese tamano no se ve: habia que sacarlo a un archivo
+    temporal, ampliarlo con PIL desde fuera y volver a guardarlo — tres viajes
+    por icono. Con esto es un argumento.
     """
     if width <= 0 or height <= 0:
         raise ValueError(f"Region invalida: {width}x{height}")
 
     os.makedirs(os.path.dirname(os.path.abspath(destino)), exist_ok=True)
     img = _grab(left, top, width, height)
+    if escala and escala > 1:
+        from PIL import Image as _Image
+        escala = min(float(escala), 10.0)
+        img = img.resize((int(img.width * escala), int(img.height * escala)),
+                         _Image.LANCZOS)
     img.save(destino, optimize=True)
 
     avisos = []
@@ -894,8 +904,12 @@ def capturar_region(left, top, width, height, destino):
     # Un recorte del tamano de un icono es lo que produjo los 10 archivos de
     # 0 bytes de IFACTURAOPT. La foto de un boton es la VENTANA que abre, con
     # su barra de titulo — no el dibujo del boton.
+    # Con `escala` el llamador esta DICIENDO que quiere el icono, asi que el
+    # aviso seria ruido. Se calla por intencion declarada, no por como haya
+    # comprimido el PNG: un icono plano ampliado x5 sigue pesando poco.
     bytes_ = os.path.getsize(destino)
-    if img.width < 130 or img.height < 70 or bytes_ < 1500:
+    if (not escala or escala <= 1) and (img.width < 130 or img.height < 70
+                                        or bytes_ < 1500):
         avisos.append(
             f"RECORTE MINUSCULO: {img.width}x{img.height} px, {bytes_} bytes. "
             "Si querias la ventana que abre un boton, esto es solo el icono: "

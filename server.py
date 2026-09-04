@@ -125,6 +125,42 @@ def _exigir_frente(hwnd):
         "aplicación.")
 
 
+def _foto_repetida(ruta):
+    """Nombre de una foto ya guardada IDENTICA a la de `ruta`, o None.
+
+    Existe porque abrir dos veces la misma lista es el gasto mas facil de
+    cometer y el mas tarde en notarse: en fmovimie se abrio 'Plan de Cuentas'
+    desde dos campos distintos -CGFK$CUENTAS y LOV_TCPLANCUENTAS, dos LOV del
+    .fmb que pintan la MISMA lista de 2.768 filas- y no se supo hasta comparar
+    los hashes al final, con la forma ya cerrada.
+    """
+    import hashlib
+    try:
+        with open(ruta, "rb") as f:
+            mio = hashlib.sha256(f.read()).digest()
+    except OSError:
+        return None
+    carpeta = os.path.dirname(os.path.abspath(ruta))
+    yo = os.path.basename(ruta)
+    try:
+        vecinos = sorted(os.listdir(carpeta))
+    except OSError:
+        return None
+    for n in vecinos:
+        if n == yo or not n.lower().endswith(".png"):
+            continue
+        p = os.path.join(carpeta, n)
+        try:
+            if os.path.getsize(p) != os.path.getsize(ruta):
+                continue          # el tamano descarta casi todo sin leer
+            with open(p, "rb") as f:
+                if hashlib.sha256(f.read()).digest() == mio:
+                    return n
+        except OSError:
+            continue
+    return None
+
+
 def _ruta_salida(nombre=None, sub=None, carpeta=None):
     """Ruta del PNG. Con `carpeta` se guarda ahi; si no, en la carpeta del dia."""
     if carpeta:
@@ -392,7 +428,8 @@ def forms_esperar(segundos: float = 1.0) -> str:
 def forms_capturar(nombre: str = "", hwnd: str = "",
                    x: int = -1, y: int = -1, ancho: int = -1, alto: int = -1,
                    incluir_marco: bool = False, carpeta: str = "",
-                   auto: bool = False, comparar_con: str = "") -> str:
+                   auto: bool = False, comparar_con: str = "",
+                   escala: float = 1.0) -> str:
     """Fotografia la ventana de Forms, o una zona de ella, y guarda un PNG.
 
     USA auto=True para las fotos de manual: recorta exactamente la ventana
@@ -419,6 +456,15 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
             pantalla y lo dice: IDENTICAS / CAMBIO MENOR / CAMBIO ESTRUCTURAL.
             Con eso se decide si un control necesita las dos versiones, y se
             caza el caso en que el control NO se movio.
+        escala: amplia la imagen antes de guardarla (1..10). Para el ICONO de
+            un boton, que mide 24x22 px y a ese tamano no se ve: escala=5.
+            Antes habia que sacarlo a un temporal, ampliarlo por fuera y
+            volver a guardarlo, tres viajes por icono.
+
+    Si la foto sale IDENTICA a otra que ya esta en la misma carpeta, NO se
+    guarda y se avisa con el nombre de la que ya existe. Abrir dos veces la
+    misma lista es el gasto mas facil de cometer, y asi se sabe en el momento
+    y no al final.
     """
     h = _resolver(int(hwnd, 0) if hwnd else None)
     # A.8.31 + A.8.12: una captura de un ambiente no autorizado saca datos de
@@ -464,7 +510,8 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
         etiqueta = "frame completo" if incluir_marco else "canvas completo"
 
     destino = _ruta_salida(nombre, carpeta=carpeta or None)
-    ruta, aw, ah, avisos = w.capturar_region(left, top, ww, hh, destino)
+    ruta, aw, ah, avisos = w.capturar_region(left, top, ww, hh, destino,
+                                             escala=escala)
 
     if comparar_con:
         if not os.path.exists(comparar_con):
@@ -488,6 +535,25 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
                 else:
                     avisos.append("cambia lo que el usuario puede hacer: "
                                   "van LAS DOS versiones, con el estado en el nombre.")
+
+    gemela = _foto_repetida(ruta)
+    if gemela:
+        # Se borra la recien hecha, no la que ya estaba: la primera lleva el
+        # nombre que se decidio con la pantalla delante.
+        try:
+            os.remove(ruta)
+        except OSError:
+            pass
+        _bitacora(accion="capturar", detalle=etiqueta,
+                  resultado=f"REPETIDA de {gemela}", nivel="aviso")
+        return _aviso(
+            f"ESTA FOTO YA LA TENIAS: es identica, pixel a pixel, a "
+            f"{gemela}. No se guarda una segunda copia.\n"
+            f"  Lo que acabas de abrir ya estaba fotografiado — no vuelvas a "
+            f"abrirlo. Dos LOV distintas del .fmb pueden pintar la MISMA "
+            f"lista: paso con 'Plan de Cuentas' en fmovimie, que sale de "
+            f"CGFK$CUENTAS y de LOV_TCPLANCUENTAS.\n"
+            f"  Anotalo como redundante en el .txt de pendientes y sigue.")
 
     _bitacora(accion="capturar", detalle=etiqueta, resultado=ruta, avisos=avisos)
     cola = ("\n  " + "\n  ".join(avisos)) if avisos else ""
