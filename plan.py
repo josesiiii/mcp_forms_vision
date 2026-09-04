@@ -155,6 +155,25 @@ def _analizar_rutas(cargar):
         if win and invocadores.get(win) and not invocadores.get(cv):
             invocadores[cv] = [{**i, "via_ventana": win} for i in invocadores[win]]
 
+    def sin_control(objetivo):
+        """True si TODOS sus disparadores son items que no estan en un canvas.
+
+        Un item sin canvas no se puede pulsar: no esta en pantalla. Medido el
+        2026-09-04 en evisitas — VER2 no tiene canvas asignado, y con el se cae
+        CNV_DOCUMENTOS y sus 13 items. El plan lo pedia como "desde VER2", que
+        manda a buscar en pantalla un control que no existe, y eso se paga
+        buscandolo pestana por pestana.
+
+        Las llamadas desde un program unit NO cuentan: ahi el canvas vacio es
+        lo normal y la ruta puede existir igual.
+        """
+        invs = invocadores.get(objetivo, [])
+        reales = [i for i in invs if i["item"] != "(program unit)"]
+        if not reales or len(reales) != len(invs):
+            return False
+        return all(not (i["canvas"] or i["tab"]) and i["item"] in donde
+                   for i in reales)
+
     def encerrada(objetivo):
         """True si solo se invoca desde dentro de una ventana secundaria."""
         invs = invocadores.get(objetivo, [])
@@ -168,6 +187,7 @@ def _analizar_rutas(cargar):
 
     return {"invocadores": invocadores, "rotas": rotas,
             "existentes": existentes, "encerrada": encerrada,
+            "sin_control": sin_control,
             "ventana_del_canvas": ventana_del_canvas,
             "canvas_raiz": canvas_raiz}
 
@@ -441,19 +461,83 @@ def _elementos_de_seccion(bloques, lov_titulo, riesgo_boton, canvas, tab):
     return _colapsar_rangos(fuera)
 
 
+# Verbos de escritura que se buscan en el NOMBRE de un procedimiento llamado,
+# no en el cuerpo del trigger. Existe porque 'verbos_peligrosos' trae "INSERT "
+# con espacio -para no cazar cualquier palabra que contenga 'insert'- y por eso
+# BTN_SCRIPT de etipest, cuyo trigger entero es 'a1v.Insert_Script;', salio
+# clasificado como seguro. Un boton que delega en una PLL no se puede auditar:
+# el cuerpo no viene en el extract.
+_VERBOS_EN_NOMBRE = ("INSERT", "UPDATE", "DELETE", "GRABAR", "SALVAR",
+                     "GUARDAR", "BORRAR", "ELIMINAR", "ANULAR", "GENERAR",
+                     "PROCESAR", "ACTUALIZAR", "CREAR", "REGISTRAR")
+
+
+def _llamadas_cualificadas(codigo):
+    """Los 'paquete.procedimiento' que invoca el codigo.
+
+    Antes hay que quitar las cadenas y las referencias :BLOQUE.ITEM, porque
+    Set_item_Property('TESOPORTES.DSP_ASESOR', ...) tambien tiene un punto y
+    no es una llamada a nada.
+    """
+    import re as _re
+    limpio = _re.sub(r"'[^']*'", "''", codigo)
+    limpio = _re.sub(r":\s*[A-Za-z_]\w*(\.\w+)?", " ", limpio)
+    limpio = "\n".join(l for l in limpio.splitlines()
+                       if not l.strip().startswith("--"))
+    return _re.findall(r"\b([A-Za-z_]\w*)\.([A-Za-z_]\w*)\s*[(;]", limpio)
+
+
+def _gesto_lov(codigo):
+    """Como se abre la LOV que cuelga de este boton, leido de su trigger.
+
+    Los tres casos se midieron el 2026-09-04, y aparecen LOS TRES DENTRO DE LA
+    MISMA FORMA (esoporte), asi que no hay regla por forma ni por zona de la
+    pantalla: hay que mirar boton por boton. Adivinarlo costo varias aperturas
+    en falso, que es justo lo que este dato evita.
+    """
+    alto = codigo.upper()
+    if "LOV_NAME" not in alto and "LIST_VALUES" not in alto:
+        return ""
+    if "LIST_VALUES" in alto:
+        aviso = "un click abre (llama LIST_VALUES)"
+        # Ojo: varias formas ponen Lov_Name a '' en la rama del campo vacio y
+        # DESPUES llaman LIST_VALUES. No hay lista que mostrar y no pasa nada.
+        if "LOV_NAME,''" in alto.replace(" ", "") \
+                or "LOV_NAME,'')" in alto.replace(" ", ""):
+            aviso += "; con el campo VACIO no muestra nada: escribe un fragmento antes"
+        return aviso
+    return ("solo ARMA la lista, no la muestra: escribe un fragmento en el "
+            "campo, pulsa la flecha, vuelve al campo y Ctrl+L")
+
+
 def _clasificar(codigo):
     """(riesgo, motivo) de un WHEN-BUTTON-PRESSED."""
     alto = [v for v in w.ajustes()["verbos_peligrosos"]
             if v in codigo.upper()]
     if alto:
         return "NO TOCAR", "+".join(v.strip() for v in alto)
+    # Delegacion en libreria: el nombre del procedimiento es lo unico que se
+    # puede leer, porque el cuerpo esta en una PLL fuera del extract.
+    for paquete, proc in _llamadas_cualificadas(codigo):
+        if any(v in proc.upper() for v in _VERBOS_EN_NOMBRE):
+            return ("NO TOCAR",
+                    f"delega en {paquete}.{proc} — verbo de escritura en el "
+                    f"nombre y cuerpo FUERA del extract: no se puede auditar")
     if "OPEN_FORM" in codigo.upper() or "CALL_FORM" in codigo.upper():
         import re as _re
         otras = _re.findall(r"(?:OPEN_FORM|CALL_FORM)\s*\(\s*'([^']+)'", codigo, _re.I)
         return "otra forma", ",".join(otras) or "?"
+    gesto = _gesto_lov(codigo)
+    if gesto:
+        return "LOV", gesto
     seguros = [v for v in VERBOS_SEGUROS if v in codigo.upper()]
     if seguros:
         return "seguro", "+".join(seguros)
+    fuera_vista = _llamadas_cualificadas(codigo)
+    if fuera_vista:
+        p, pr = fuera_vista[0]
+        return "revisar", (f"delega en {p}.{pr}, cuerpo fuera del extract: "
+                           f"no verificable")
     return "revisar", "sin verbo reconocido"
 
 

@@ -41,6 +41,15 @@ def _exigir_ventana_datos(hwnd, minimo=0.8):
     """Motivo por el que NO se puede pulsar por coordenadas, o None."""
     v = w.detectar_ventana_reintentando(hwnd)
     if v is None:
+        # Segunda vuelta trayendo la ventana al frente. Los 3 reintentos de
+        # detectar_ventana_reintentando cubren un repintado a medias, pero no
+        # el caso en que la ventana perdio el primer plano: entonces los tres
+        # miran lo mismo y fallan igual. Medido el 2026-09-04 en esoporte —
+        # click_item fallo con "no se detecta ninguna ventana activa" y la
+        # MISMA llamada, repetida a mano acto seguido, funciono.
+        w.traer_al_frente(hwnd)
+        v = w.detectar_ventana_reintentando(hwnd, intentos=4, espera=0.35)
+    if v is None:
         return "no se detecta ninguna ventana activa: no se pulsa a ciegas"
     esperada = _ventana_datos.get(hwnd)
     if esperada is None:

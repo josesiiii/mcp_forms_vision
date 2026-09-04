@@ -12,111 +12,6 @@
 
 ---
 
-## PASO 0 — ¿ABRE LA FORMA? (antes de cualquier otra cosa)
-
-Lo primero, siempre, es **abrirla y mirar**. No se planifica, ni se calibra, ni
-se consulta nada hasta saber si la forma arranca.
-
-```
-abre  -> se hace el proceso completo
-NO abre -> se documenta y se CANCELA en el acto
-```
-
-**Un solo intento.** Si al lanzarla sale un error o un aviso de que no existe
-—p.ej. `Error executing module: <fgeninte>`— se anota el mensaje **literal** en
-`Pendientes de fotos guías/<Modulo>/<FORMA>/<FORMA>.txt` y se abandona esa
-forma hasta nuevo aviso. Nada de reintentos, nada de diagnosticar por qué, nada
-de comprobar `.fmx` ni permisos: eso es gastar recursos en una forma que ya se
-descartó. Regla del usuario, 2026-09-04.
-
-Medido ese mismo día en Portafolio: abrieron `fclasinv` y `femisore`; fallaron
-`fgeninte`, `finterfa` y `finversi` con el mismo mensaje. El corte fue de
-entorno (despliegue en el servidor de Forms), no de la política.
-
-> El mensaje de error **sale duplicado**: hay que pulsar *Aceptar* dos veces.
-> Mientras quede uno en pantalla, la caja de lanzamiento no acepta teclado y
-> parece bloqueada cuando lo único que hay es un modal encima.
-
-### Cómo se lanza una forma
-
-Por su **código**, en la caja de texto de la barra de SAFIX. Es lo **único**
-de esa barra que se toca: el resto de la barra —binóculo, guardar, duplicar
-registro, borrar— queda fuera de límites (regla del usuario, 2026-09-04). El
-equivalente de teclado del binóculo es `Ctrl+F11` (*Registros → Ejecutar
-Consulta*), y en el mismo menú está *Limpiar Forma* para salir de un estado
-sucio.
-
-La caja **conserva el código anterior** y hay que vaciarla antes de escribir.
-Ni `Ctrl+A` ni `Ctrl+Shift+→` seleccionan el texto cuando las teclas se
-inyectan: se probaron las dos y el código nuevo acabó insertado en medio
-(`…eninteFMOVIMIE`). Lo que sí funciona:
-
-```
-click en la caja
-END                   <-- END, no HOME
-BACKSPACE  x30        (la vacia; sobran, no molestan)
-escribir el codigo
-ENTER
-```
-
-> **`END`, no `HOME`.** `BACKSPACE` borra hacia la izquierda: desde el inicio
-> del campo no borra nada. Con `HOME` el código nuevo se inserta **delante**
-> del anterior y sale `FPLANEACFMO…`, que SAFIX rechaza con *«La forma
-> seleccionada no existe»* — un mensaje que parece de la forma y es del
-> lanzamiento. Costó un intento en `fplaneac` el 2026-09-04.
->
-> Un *«no existe»* con la caja sin verificar **no** dispara la suspensión de la
-> forma: primero se comprueba qué decía la caja.
-
-Todo eso cabe en **una sola** llamada a `forms_secuencia`, y con `capturar` al
-final para ver si abrió. Verificar la caja antes de `ENTER` solo hace falta si
-el borrado no se hizo en la misma tanda.
-
-## LO QUE NO SE REPITE — reglas de gasto
-
-Este proceso se corre sobre decenas de formas, así que lo repetido cuesta de
-verdad. Tres cosas que medimos gastando de más:
-
-**Una lista fotografiada no se vuelve a abrir.** Dos LOV distintas del `.fmb`
-pueden pintar la MISMA lista: en `fmovimie`, `CGFK$CUENTAS` y
-`LOV_TCPLANCUENTAS` dan las mismas 2.768 filas de *Plan de Cuentas*. Antes de
-abrir una LOV, comprobar si su lista ya está en la carpeta. `forms_capturar`
-ahora lo detecta al guardar: si la foto sale idéntica a otra de la misma
-carpeta **no la guarda** y devuelve un `[AVISO]` con el nombre de la que ya
-existe. Eso corta el lote, que es lo que se quiere.
-
-**No se abre el PNG para comprobar que sirve.** El resultado de
-`forms_capturar` ya dice el tamaño, si salió negra o plana, si la barra de
-título quedó completa y —con `comparar_con`— cuánto cambió la pantalla. Abrir
-la imagen solo hace falta cuando hay que **leer** algo de ella: el nombre de
-una etiqueta, el título de una LOV, cuántos valores trae. Para todo lo demás,
-el texto del resultado basta.
-
-**El icono de un botón se saca con `escala`, no con tres viajes.**
-`forms_capturar(x=…, y=…, ancho=34, alto=32, escala=5)` guarda el icono ya
-ampliado y sin el aviso de recorte minúsculo. Antes eran tres llamadas por
-icono: capturar, ampliar por fuera con PIL, y volver a guardar.
-
-### Orden que ahorra pasadas
-
-```
-1  abrir la forma                    -> ¿abre? si no, documentar y cancelar
-2  forms_plan                        -> secciones, LOVs, botones NO TOCAR
-3  contar filas en la BD             -> decide si merece la pena cargar registro
-4  forms_calibrar                    -> y mirar cuantas ALTURAS encajan
-5  pasada UNICA en registro nuevo    -> LOVs y desplegables (aqui SI abren)
-6  pasada con registro, solo si hay datos que ver
-7  paneles y pestanas, con comparar_con entre consecutivas
-8  iconos con escala=5
-9  forms_pendientes + los hallazgos de ejecucion
-```
-
-El paso 3 es el que más pasadas ahorra: si las tablas del detalle están
-vacías, la pasada con registro no aporta nada y se hace **una sola**. Con
-`fmovimie` se comprobó primero (`TFMOVIMIENTOS` y sus dos detalles a 0 filas) y
-se hizo una única pasada; con `femisore` no se comprobó antes y se gastaron
-varios intentos de consulta que nunca podían devolver nada.
-
 ## CONTEXTO
 
 Vas a tomar las capturas que necesita el manual de usuario de una forma de
@@ -256,28 +151,12 @@ del resultado lo dice sin necesidad de abrir el PNG.
 
 ## NOMBRES DE ARCHIVO
 
-El nombre es el **nombre de la forma** seguido de la **ruta de navegación
-acumulada**, en minúscula y con `_`:
+El nombre es la **ruta de navegación acumulada**, empezando por la pestaña
+(sin el nombre de la forma), en minúscula y con `_`:
 
 ```
-NN_<forma>_<pestaña>_<radio/panel>_<prefijo>_<elemento>.png
+NN_<pestaña>_<radio/panel>_<prefijo>_<elemento>.png
 ```
-
-`<forma>` es el **título que la forma muestra en su barra**, no el código del
-`.fmb`: `Calificaciones Portafolio de Inversiones` →
-`calificaciones_portafolio_de_inversiones`. Va en **todas** las fotos, aunque
-la carpeta ya se llame igual — las imágenes se sacan de la carpeta para pegarlas
-en el manual, y allí el nombre del archivo es lo único que queda.
-
-Si la forma no tiene pestañas, ese segmento no existe y detrás del nombre va
-directamente la sección o el elemento:
-
-```
-01_calificaciones_portafolio_de_inversiones_principal.png
-02_calificaciones_portafolio_de_inversiones_select_list_tipo.png
-```
-
-> Regla añadida el 2026-09-04. Las fotos tomadas antes no la llevan.
 
 | Prefijo | Para | Se reconoce por `parent_name` |
 |---|---|---|
@@ -356,14 +235,12 @@ la etiqueta es una tilde perdida (uno al final es legítimo: `Inconsistencias?`)
 El plan marca esos como `<leer_en_pantalla>`; si se dejan pasar, el archivo sale
 `lov_dise_o`.
 
-Con el nombre de la forma delante (aquí *Bien Inmueble*):
-
 ```
-01_bien_inmueble_principal.png                        una sola sección
-01_bien_inmueble_basica_principal.png                 si hay varias pestañas
-02_bien_inmueble_basica_select_list_departamento.png
-03_bien_inmueble_basica_radio_btn_avaluos.png
-04_bien_inmueble_basica_radio_btn_avaluos_select_list_avaluador.png
+01_principal.png                        si la forma tiene una sola sección
+01_basica_principal.png                 si hay varias pestañas
+02_basica_select_list_departamento.png
+03_basica_radio_btn_avaluos.png
+04_basica_radio_btn_avaluos_select_list_avaluador.png
 ```
 
 ### El estado va en la ruta, como un segmento más
@@ -509,6 +386,46 @@ lista de verdad (se reconoce por el tamaño: **466×326**).
 Si al pulsar el binóculo pide guardar, la respuesta es **No** — descarta lo que
 se haya tocado y continúa. Ojo: eso reinicializa la forma a un registro nuevo,
 así que conviene pulsarlo **antes** de tocar cualquier campo.
+
+### Antes de probar un gesto, lee el trigger del botón
+
+Cada flecha azul es un ítem `BTN_*`, y su `WHEN-BUTTON-PRESSED` **dice** cómo se
+abre la lista. Se lee una vez, del extract, para toda la forma:
+
+```
+04_triggers_item.json -> los WHEN-BUTTON-PRESSED que mencionan
+                         Lov_Name o LIST_VALUES
+```
+
+| Lo que hace el trigger | Gesto |
+|---|---|
+| asigna `Lov_Name` **y** llama `LIST_VALUES` | un click en la flecha |
+| **solo** asigna `Lov_Name` | escribir un fragmento → flecha → volver al campo → `Ctrl+L` |
+| pone `Lov_Name` a `''` y llama `LIST_VALUES` | igual: **con el campo vacío no hay lista** |
+| no tiene trigger | decorativo; la LOV va en el ítem → `Ctrl+L` en el campo |
+
+Los cuatro casos conviven en una misma forma (`esoporte`). `forms_plan` ya los
+clasifica como `LOV` y escribe el gesto.
+
+**`Ctrl+L` y `F9` no son lo mismo.** Si uno no abre, se prueba el otro antes de
+anotar el campo como bloqueado.
+
+**Cuenta las filas en la BD antes.** Sirve para dos cosas: saber si la lista
+puede devolver algo, y **verificar** que la que abrió es la que se creía —
+`Choices in list: N` de la barra de estado tiene que coincidir con el conteo.
+
+**Una LOV dependiente necesita su padre lleno.** El indicador *List of Values*
+de la barra de estado se enciende solo entonces. Primero el padre.
+
+### Cerrar una lista: dos `ESC`, y cuidado con el click siguiente
+
+El primer `ESC` sale de la caja *Find*; el segundo cierra la lista. Y mientras
+está abierta **ocupa x 180-652, y 202-528**: un click dirigido a la forma cae
+dentro de la lista y no pasa nada visible, así que la foto siguiente sale siendo
+la lista anterior con otro nombre. Dos salidas:
+
+- encadenar solo clicks **fuera** de ese rectángulo, o
+- usar el paso `cerrar`, que verifica en vez de suponer.
 
 ## PROCESO OBLIGATORIO — EN ESTE ORDEN
 

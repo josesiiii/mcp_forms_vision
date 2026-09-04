@@ -39,6 +39,27 @@ abre por la flecha.
 **En la herramienta**: el aviso de `IDENTICAS` lleva ahora la escalera de
 gestos y la frase «no generalices, campo por campo».
 
+#### Y la respuesta: el gesto está escrito en el trigger del botón
+
+Probar gestos a ciegas fue el error; leer el `.fmb` lo resuelve. Cada flecha
+azul es un ítem `BTN_*`, y lo que hace su `WHEN-BUTTON-PRESSED` decide el gesto.
+Los **tres** casos aparecen dentro de `esoporte`, así que no hay regla por forma:
+
+| lo que hace el trigger | qué abre | gesto |
+|---|---|---|
+| asigna `Lov_Name` **y** llama `LIST_VALUES` | abre | un click |
+| **solo** asigna `Lov_Name` | arma la lista | escribir un fragmento → flecha → volver al campo → `Ctrl+L` |
+| pone `Lov_Name` a `''` y **luego** llama `LIST_VALUES` | nada | igual: sin texto en el campo no hay lista |
+| sin trigger | nada | decorativo; la LOV, si existe, va en el ítem → `Ctrl+L` |
+
+En `esoporte`: `BTN_CLIENTE` abre con un click; `BTN_ASESOR`, `BTN_REALIZADO` y
+`BTN_RESPONSABLE` solo arman; `BTN_MOD_VKPCODIGO` y `BTN_MOD_SIN_VIG` no tienen
+trigger. En `evisitas` los cuatro llaman `LIST_VALUES`, pero borran la lista en
+la rama del campo vacío. Con esto, *Asesor* abrió al primer intento en las dos.
+
+**En la herramienta**: `forms_plan` clasifica ahora esos botones como `LOV` y
+dice el gesto (`pruebas_riesgo`).
+
 ### 2 · Mezclar coordenadas de ventana y de canvas
 
 Dos veces. Un pixel leído en una captura de la **ventana** se pulsó como si
@@ -90,6 +111,31 @@ funcionalidad documentable, no un fallo.
 `forms_cerrar_popup` se escribió por eso— y medido el 2026-09-04 las cierra sin
 problema. Sale gratis: una tecla, encadenable, sin medir el botón *Cancel*.
 
+**Pero hace falta pulsarlo DOS veces**, y el segundo `ESC` no es opcional: el
+primero sale de la caja *Find*, el segundo cierra la lista. Medido dos veces el
+mismo día. Y con la lista abierta, **un click dirigido a la forma cae dentro de
+la ventana de la LOV** —ocupa x 180-652, y 202-528 en un canvas de 1366×697—:
+así se tomó una foto que era la lista anterior con otro nombre. Dos reglas
+prácticas:
+
+- después de `ESC`, encadenar solo clicks **fuera** de ese rectángulo;
+- o usar el paso `cerrar`, que verifica en vez de suponer.
+
+**`Ctrl+L` y `F9` no son intercambiables.** En la rejilla de `esoporte`, `F9`
+dejó el indicador *List of Values* encendido y no mostró nada; `Ctrl+L` abrió la
+lista de 139. Se prueban las dos antes de anotar un campo como bloqueado.
+
+**Una flecha que «solo mueve el foco» puede ser una LOV de 0 filas.** En
+`esoporte` interpreté que *Módulo* no reaccionaba; lo que pasaba es que
+`TKCLIENTESMODULOS` está **vacía en todo el esquema**, y Forms no pinta una
+lista sin filas. Es la regla de «vacía o rota» aplicada al gesto: antes de
+llamarlo defecto, contar filas.
+
+**Una LOV dependiente no abre hasta que su padre tiene valor.** *Módulo* filtra
+por el cliente; con el registro vacío no podía devolver nada. El indicador
+*List of Values* de la barra de estado se encendió solo al llenar *Cliente*.
+Orden: primero el padre.
+
 ---
 
 ## Antes de tocar la forma
@@ -103,6 +149,22 @@ nunca podían devolver nada.
 **15 consultas distintas**, y cuatro de ellas ya estaban fotografiadas en otras
 formas con la consulta byte a byte idéntica. Una lectura del `.fmb` en vez de
 22 aperturas.
+
+El caso extremo es `evisitas`: **24 record groups son ~11 listas**, y **ocho de
+ellos son la misma** consulta de terceros `'EMP'` con distinto filtro
+(`RG_ASESORES`, `RG_EMPLE_TOMA`, `RG_EMPLE_TOMA_NOMBRE/CODIGO`,
+`RG_EMPLE_EJECUTA_NOMBRE/CODIGO`, `RG_ASESORES_NOMBRE/CODIGO`). Una foto para
+los ocho. Es el paso que más aperturas ahorra de todos los medidos: 13.
+
+El patrón se repite: SAFIX declara **dos** grupos por campo, uno por *nombre*
+(`... LIKE Upper(:campo)||'%'`) y otro por *identificación* (`= :campo`), y el
+botón elige según lo que se haya escrito. Son la misma lista.
+
+**El conteo también VERIFICA la foto.** La barra de estado dice `Choices in
+list: N`. Si ese N coincide con el conteo que se sacó de la BD, la lista abierta
+es la que se creía; si no, se abrió otra. En Corporativo cuadró cinco veces
+seguidas —139=139, 10.416=10.416, 9=9, 57=57, 40=40, 30=30, 10=10— y por eso no
+hizo falta abrir ningún PNG para comprobar el rótulo.
 
 **Distinguir «vacía» de «rota».** Una lista sin valores puede ser falta de
 datos o una consulta mal escrita. En `fcalifica` el record group filtra por el
@@ -150,6 +212,16 @@ dieron 0,99% y 2,74% porque ocupan la misma zona. Se compara contra el estado
 Mientras quede uno, la caja de lanzamiento no recibe teclado y parece
 bloqueada.
 
+**La foto puede no ser de Forms.** El 2026-09-04 una captura salió del **Visor
+de fotos de Windows** y se guardó en la carpeta de entregables, con nombre de
+foto de manual. `traer_al_frente` había devuelto `True`: Windows puede negar el
+cambio de foco, y la captura sale del **rectángulo de pantalla**, o sea de lo
+que haya encima.
+
+**En la herramienta**: `forms_capturar` comprueba ahora **quién** quedó delante
+—por pid, para que una LOV o un modal de Forms sigan valiendo— y falla antes de
+escribir el archivo (`pruebas_riesgo`).
+
 ---
 
 ## Lo que la herramienta ya hace sola
@@ -166,8 +238,17 @@ prueba:
 | rejilla y `off_y` | se puntúan **alturas** distintas, no encajes (`pruebas_calibra`) |
 | `texto=01` | llega como texto, no como `int` 1 (`pruebas_parser`) |
 | ambiente | solo se actúa en los autorizados (`pruebas_ambiente`) |
+| gesto de una LOV | se dice leyendo el trigger del botón (`pruebas_riesgo`) |
+| botón que delega en una PLL | cuenta como **NO TOCAR**, no como seguro (`pruebas_riesgo`) |
+| sección sin control en pantalla | se descarta `SIN CONTROL` (`pruebas_riesgo`) |
+| otra aplicación delante | la captura falla en vez de guardarla (`pruebas_riesgo`) |
+| ventana de datos | ya no se confunde con un recuadro por una medida rancia (`pruebas_riesgo`) |
 
-**155 comprobaciones** corren sin abrir SAFIX.
+**193 comprobaciones** corren sin abrir SAFIX.
+
+> Se corren con el Python del servidor, no con el del sistema:
+> `%LOCALAPPDATA%\forms-vision-venv\Scripts\python.exe`. Con el otro fallan
+> todas por `ModuleNotFoundError: mcp`, que parece un desastre y no lo es.
 
 ---
 
@@ -182,6 +263,10 @@ distintas. Se compara por la **consulta** y por el **conteo de filas**:
 | Plan de Cuentas | `fvalora` | `+ FRESMOVIMIENTO='S' AND VRXESTADO='A'` | **2.767** |
 | Terceros | `femisore` | `VXTERCEROS` | 6.987 |
 | Terceros | `fvalora` | `VXTERCEROSTODOS` | **7.014** |
+| Clientes | `esoporte` | `txTerceros+tkClientes+poblaciones` | 1.812 |
+| Clientes | `evisitas` | `VKCLIENTES` | **2.568** |
+| Empleados | `esoporte` | `txTerceros+txTercerosTipos 'EMP'` | 83 |
+| Empleados | `esoporte` *Realizado por* | `+ thTercerosPerEmpleados` | **93** |
 
 Una fila de diferencia y 27 de diferencia: son cuatro listas, no dos. En
 cambio dentro de `fmovimie`, `CGFK$CUENTAS` y `LOV_TCPLANCUENTAS` **sí** dan
@@ -200,6 +285,10 @@ exactamente la misma —2.768— y ahí sobra una foto.
   de la pantalla.
 - **El detector de ventana activa elige por área**, y una ventana secundaria
   más grande le gana a la de datos. Pasó al empezar con dos formas abiertas.
+- **`_ventana_datos` se guarda por `hwnd`**, y el `hwnd` del frame de SAFIX es
+  el mismo para todas las formas: al cambiar de forma la referencia queda
+  rancia. Ya se refresca al identificar la ventana de datos, pero la clave
+  correcta sería `(hwnd, forma)`.
 - **`Ctrl+Shift+→` no selecciona** cuando las teclas se inyectan. Se vacía la
   caja con **`END`** + `BACKSPACE` ×30 (ver la entrada 0: con `HOME` no borra
   nada).

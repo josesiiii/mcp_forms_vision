@@ -495,6 +495,26 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
         return _fallo("no se pudo poner la ventana en primer plano; la captura saldria "
                 "tapada o negra. Cierra el dialogo que este encima y reintenta.")
 
+    # Pedir el primer plano no garantiza obtenerlo: Windows puede negar el
+    # cambio de foco y `capturar_region` fotografia el RECTANGULO de pantalla,
+    # o sea lo que haya encima. Paso de verdad el 2026-09-04: se guardo el
+    # Visor de fotos de Windows dentro de la carpeta de entregables, con
+    # nombre de foto de manual y todo. Se comprueba QUIEN quedo delante, por
+    # pid y no por hwnd, porque una LOV o un modal de Forms son otro hwnd del
+    # MISMO proceso y esos si valen.
+    pid_forms, _exe_forms = w.proceso_de_ventana(h)
+    fg = w.ventana_al_frente()
+    if fg and fg["pid"] != pid_forms:
+        time.sleep(0.4)                      # por si el foco iba en camino
+        fg = w.ventana_al_frente()
+    if fg and fg["pid"] != pid_forms:
+        _bitacora(accion="RECHAZADO",
+                  detalle=f"captura: delante {fg['exe']}"[:70], nivel="falla")
+        return _fallo(
+            f"delante de Forms hay otra aplicacion: {fg['exe']} "
+            f"— {(fg['titulo'] or '')[:50]!r}. La foto saldria de ESA ventana. "
+            f"Cierrala o minimizala y reintenta.")
+
     (cl, ct, cr, cb), _ = w.canvas_de(h)
     if incluir_marco:
         cl, ct, cr, cb = w.rect(h)
@@ -877,6 +897,15 @@ def forms_plan(forma: str, seccion: str = "") -> str:
             dentro = ", ".join(sorted({i["item"] for i in invs})[:3])
             descartadas.append((etiqueta, cuantos, "ENCERRADA",
                                 f"solo se invoca desde otra ventana secundaria ({dentro})"))
+            continue
+        # Tener un invocador no basta: ese invocador tiene que estar EN algun
+        # canvas para poder pulsarlo. Medido en evisitas: VER2 no esta en
+        # ninguno, y el plan pedia CNV_DOCUMENTOS "desde VER2".
+        if not es_raiz and rutas["sin_control"](clave):
+            quien = ", ".join(sorted({i["item"] for i in invs})[:3])
+            descartadas.append((etiqueta, cuantos, "SIN CONTROL",
+                                f"su unico disparador ({quien}) no esta en ningun "
+                                f"canvas: no hay nada que pulsar en pantalla"))
             continue
 
         n += 1
@@ -1366,6 +1395,11 @@ def _cerrar_uno(hwnd, ancho_datos=None):
         es_datos = v["ancho"] >= ancho_datos
 
     if es_datos:
+        # Refrescar la referencia aprovechando que se acaba de identificar. Es
+        # lo que evita que se quede rancia: _ventana_datos se guarda por hwnd, y
+        # el hwnd del frame de SAFIX es el MISMO para todas las formas, asi que
+        # al cambiar de forma la medida guardada es la de la anterior.
+        _ventana_datos[h] = (v["ancho"], v["alto"])
         return (f"Delante esta la ventana de datos ({v['ancho']}x{v['alto']}): "
                 "no hay recuadro que cerrar.")
     # Las posiciones de los botones viven en ajustes.json: son del look&feel de
@@ -1380,8 +1414,21 @@ def _cerrar_uno(hwnd, ancho_datos=None):
     forms_click(x=cx, y=cy, hwnd=hwnd, relativo=True)
     time.sleep(1.2)
     v2 = w.detectar_ventana_reintentando(h)
-    sigue = (v2 and abs(v2["ancho"] - datos[0]) > 8 if datos
-             else v2 and v2["ancho"] < ancho_datos)
+    if v2 is None:
+        sigue = False
+    elif datos and abs(v2["ancho"] - datos[0]) <= 8 \
+            and abs(v2["alto"] - datos[1]) <= 8:
+        sigue = False                     # volvio la ventana de datos conocida
+    else:
+        # Si la referencia no coincide NO se concluye que quedo un recuadro: la
+        # referencia puede estar rancia (ver el refresco de arriba). Se decide
+        # por ANCHO, el mismo criterio que se usa cuando no hay referencia.
+        # Medido el 2026-09-04 en evisitas: cerro bien la LOV y aviso "sigue
+        # habiendo un recuadro (1092x571)" — que era la ventana de datos. Ese
+        # aviso lleva marca de fallo, asi que detuvo un lote correcto.
+        sigue = v2["ancho"] < ancho_datos
+        if not sigue:
+            _ventana_datos[h] = (v2["ancho"], v2["alto"])
     if sigue:
         return _aviso(f"se pulso {boton} del {tipo} pero sigue habiendo un recuadro "
                 f"({v2['ancho']}x{v2['alto']}). Miralo antes de seguir.")
