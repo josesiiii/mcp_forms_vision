@@ -10,6 +10,20 @@ Se lee de arriba abajo: lo de arriba es lo que más caro sale si se olvida.
 
 ## Lo que más caro sale
 
+### 0 · Un mensaje de error puede ser del lanzamiento, no de la forma
+
+`fplaneac` respondió *«La forma seleccionada no existe»*. Parecía la sentencia
+de muerte de la forma. No lo era: la caja de la barra decía `FPLANEACFMO`
+porque usé `HOME` antes de `BACKSPACE`, y **retroceder desde el inicio del
+campo no borra nada** — el código nuevo se insertó delante del anterior.
+
+> Antes de suspender una forma por *«no existe»*, **verificar qué decía la
+> caja**. Con el código limpio, `fplaneac` dio *«Error executing module»*, que
+> sí es el error real.
+
+La regla de suspensión sigue en pie; lo que cambia es que un reintento causado
+por un fallo propio está justificado y hay que decirlo.
+
 ### 1 · Generalizar desde tres intentos
 
 En `fofertas` dije dos veces que un grupo entero de LOVs estaba bloqueado

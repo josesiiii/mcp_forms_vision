@@ -53,11 +53,20 @@ inyectan: se probaron las dos y el código nuevo acabó insertado en medio
 
 ```
 click en la caja
-HOME
+END                   <-- END, no HOME
 BACKSPACE  x30        (la vacia; sobran, no molestan)
 escribir el codigo
 ENTER
 ```
+
+> **`END`, no `HOME`.** `BACKSPACE` borra hacia la izquierda: desde el inicio
+> del campo no borra nada. Con `HOME` el código nuevo se inserta **delante**
+> del anterior y sale `FPLANEACFMO…`, que SAFIX rechaza con *«La forma
+> seleccionada no existe»* — un mensaje que parece de la forma y es del
+> lanzamiento. Costó un intento en `fplaneac` el 2026-09-04.
+>
+> Un *«no existe»* con la caja sin verificar **no** dispara la suspensión de la
+> forma: primero se comprueba qué decía la caja.
 
 Todo eso cabe en **una sola** llamada a `forms_secuencia`, y con `capturar` al
 final para ver si abrió. Verificar la caja antes de `ENTER` solo hace falta si
