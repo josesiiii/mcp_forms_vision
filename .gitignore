@@ -1,0 +1,29 @@
+# ── entorno de Python ────────────────────────────────────────────────────────
+# El venv NO va al repo. Se crea en %LOCALAPPDATA% con instalar.ps1, porque
+# esta carpeta vive en un recurso de red y un venv ahi es tan lento que el
+# 'pip install' no termina.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# ── estado de ESTA maquina, no del proyecto ─────────────────────────────────
+# calibraciones.json es la conversion unidades del .fmb -> pixeles, medida
+# contra la ventana viva. Depende de la resolucion, del tamano de la ventana y
+# hasta de la corrida: la misma seccion dio escala 1.335/off 6 en una y
+# 1.33/off 7 en otra. Subirlo haria que otra maquina arrancara con una
+# geometria ajena, y los clicks caerian desplazados sin dar ningun error.
+# Se regenera solo con forms_calibrar.
+calibraciones.json
+
+# Bitacora y capturas de trabajo: salida, no fuente.
+_capturas/
+_bitacora/
+*.log
+
+# ── nunca ───────────────────────────────────────────────────────────────────
+# El config del escritorio guarda credenciales de Oracle en texto plano.
+claude_desktop_config.json
+.mcp.json
+*.bak

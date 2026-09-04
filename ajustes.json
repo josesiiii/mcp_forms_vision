@@ -1,0 +1,136 @@
+{
+  "_leeme": [
+    "Valores que se afinan probando. Se releen en CADA llamada, asi que",
+    "cambiarlos NO exige reiniciar la app — solo el codigo (.py) lo exige.",
+    "Si este archivo falta o esta mal formado, se usan los valores por",
+    "defecto que lleva winauto.py dentro: una edicion torpe aqui no puede",
+    "dejar la herramienta inservible."
+  ],
+  "_menor": "Cuando un cambio en pantalla cuenta como MENOR y no ESTRUCTURAL. En PIXELES, no en porcentaje: un campo de Forms ocupa ~2.400 px, y el mismo cambio es 0,26% de la ventana de datos y 1,6% de un recuadro de LOV.",
+  "menor_pixeles": 8000,
+  "menor_tope": 0.05,
+  "_marcas": "Textos que detienen un lote de forms_secuencia. Se comparan en MINUSCULA. Un marcador que falla por una tilde no es guarda.",
+  "marcas_fallo": [
+    [
+      "ojo",
+      "aviso de foco o de pantalla sin cambiar"
+    ],
+    [
+      "sigue habiendo un recuadro",
+      "quedo un recuadro encima"
+    ],
+    [
+      "hay un recuadro encima",
+      "quedo un recuadro encima"
+    ],
+    [
+      "no se hizo click",
+      "el click no se ejecuto"
+    ],
+    [
+      "no se ve resalte",
+      "el foco no quedo en un campo"
+    ],
+    [
+      "no se detect",
+      "no se detecto la ventana"
+    ],
+    [
+      "no se pudo",
+      "la accion no se pudo completar"
+    ],
+    [
+      "falta calibrar",
+      "seccion sin calibrar"
+    ],
+    [
+      "no se pulsa",
+      "control bloqueado por riesgo"
+    ],
+    [
+      "no existe '",
+      "el item no existe en esa seccion"
+    ],
+    [
+      "no tiene el radio",
+      "radio inexistente"
+    ],
+    [
+      "no declara posicion",
+      "el item no tiene coordenadas en el .fmb"
+    ],
+    [
+      "negra",
+      "captura negra"
+    ],
+    [
+      "plana",
+      "captura sin contraste"
+    ],
+    [
+      "recorte minusculo",
+      "recorte del tamano de un icono"
+    ],
+    [
+      "ajuste pobre",
+      "calibracion sin encaje suficiente"
+    ],
+    [
+      "bloqueada",
+      "sesion de Windows bloqueada"
+    ]
+  ],
+  "_clases": "parent_name -> clase de control. Los items de SAFIX heredan su tipo de una clase de propiedades; tipo_visual dice 'Text Item' para el 97% y no sirve para clasificar.",
+  "clase_por_parent": {
+    "CHECK_BOX": "CHECK",
+    "POPLIST": "LISTA",
+    "PBUTTON_LIST": "LOV",
+    "PBUTTON_ICONIC": "BOTON",
+    "PBUTTON_CALENDAR": "OMITIR_CALENDARIO",
+    "TEXT_READ_ONLY": "OMITIR_GRIS",
+    "TEXT_NORMAL": "OMITIR_TEXTO",
+    "PC_LINK": "OMITIR_ESPEJO",
+    "PC_VALOR": "OMITIR_TEXTO",
+    "PC_CANTIDAD": "OMITIR_TEXTO",
+    "PC_PORCENTAJE": "OMITIR_TEXTO",
+    "PC_CANT_SIN_DECIMAL": "OMITIR_TEXTO",
+    "TEXT_COMMENTS": "OMITIR_TEXTO",
+    "RADIO_OPTION": "OMITIR_HIJO_RADIO"
+  },
+  "_prefijo": "Prefijo del nombre de archivo por clase de control.",
+  "prefijo": {
+    "RADIO": "radio_btn_",
+    "CHECK": "check_box_",
+    "LISTA": "select_list_",
+    "LOV": "lov_",
+    "BOTON": "btn_",
+    "LINK": "link_"
+  },
+  "_rango": "Sufijos de un extremo de rango: los dos extremos abren la misma lista, asi que se fotografia una vez y sin el sufijo.",
+  "sufijos_rango": [
+    "_inicial",
+    "_final",
+    "_ini",
+    "_fin",
+    "_inicia",
+    "_desde",
+    "_hasta"
+  ],
+  "_rejilla": "A partir de cuantas casillas juntas un panel es una rejilla de seleccion (eligen que sale en el resultado, no cambian la forma) y por tanto no lleva foto propia.",
+  "rejilla_minima": 8,
+  "_encajes": "Encajes minimos para fiarse de una calibracion propia. Por debajo, si otra del mismo canvas discrepa, gana la otra: un ajuste con pocos puntos cuadra en un optimo falso con residuo aparentemente bueno y desvia todos los clicks.",
+  "encajes_fiables": 5,
+  "_verbos": "Verbos que hacen que un boton sea NO TOCAR: escribe en la base de datos o lanza un proceso.",
+  "verbos_peligrosos": [
+    "COMMIT",
+    "DELETE_RECORD",
+    "FORMS_DDL",
+    "PU_HEREDAR",
+    "CREAR_ENCUESTA",
+    "RUN_PRODUCT",
+    "APU_REPORTES",
+    "INSERT ",
+    "UPDATE ",
+    "DELETE FROM"
+  ]
+}

@@ -1,0 +1,18 @@
+# Normaliza los fines de linea: en el repo LF, en el disco de trabajo lo que
+# toque la plataforma. Sin esto, git avisa por cada archivo en cada `add` y un
+# clon en otra maquina puede marcar los 13 archivos como modificados sin que
+# nadie los haya tocado.
+* text=auto
+
+# Los .ps1 se quedan en CRLF: PowerShell los ejecuta igual con LF, pero el ISE
+# y algunos editores de Windows los muestran en una sola linea.
+*.ps1 text eol=crlf
+
+# Python y datos, LF siempre.
+*.py   text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.txt  text eol=lf
+
+# Las capturas son binarias; que git no intente normalizarlas ni mostrar diff.
+*.png binary

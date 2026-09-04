@@ -1,0 +1,16 @@
+# forms-vision - dependencias del servidor MCP
+#
+# Sin pywin32 a proposito: la capa Win32 es ctypes puro (winauto.py), porque
+# a la fecha pywin32 no tiene rueda estable para Python 3.14 en este equipo.
+#
+# Las versiones llevan TOPE MAYOR porque el SDK de MCP ya rompio la API entre
+# versiones: FastMCP paso a llamarse MCPServer, y el servidor importa
+# 'from mcp.server.mcpserver import MCPServer'. Un salto de mayor sin avisar
+# dejaria el MCP sin arrancar, y el sintoma seria "el servidor no carga" sin
+# mas pistas.
+#
+# Probado con Python 3.14.6 en Windows 11.
+
+mcp>=2.1,<3
+mss>=10.2,<11
+pillow>=12,<13
