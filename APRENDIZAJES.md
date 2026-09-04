@@ -171,6 +171,25 @@ prueba:
 
 ---
 
+## Listas que se parecen y no son la misma
+
+Comparar por **título** o por **cuánto ocupa** la lista lleva a fusionar cosas
+distintas. Se compara por la **consulta** y por el **conteo de filas**:
+
+| lista | forma | consulta | filas |
+|---|---|---|---|
+| Plan de Cuentas | `fmovimie` | `TCPLANCUENTAS` sin filtro | 2.768 |
+| Plan de Cuentas | `fvalora` | `+ FRESMOVIMIENTO='S' AND VRXESTADO='A'` | **2.767** |
+| Terceros | `femisore` | `VXTERCEROS` | 6.987 |
+| Terceros | `fvalora` | `VXTERCEROSTODOS` | **7.014** |
+
+Una fila de diferencia y 27 de diferencia: son cuatro listas, no dos. En
+cambio dentro de `fmovimie`, `CGFK$CUENTAS` y `LOV_TCPLANCUENTAS` **sí** dan
+exactamente la misma —2.768— y ahí sobra una foto.
+
+> El conteo se saca de la BD **antes** de abrir nada, y decide si la foto hace
+> falta.
+
 ## Pendiente de mejorar
 
 - **Renumerar es manual.** Al descartar fotos queda un hueco y hay que
@@ -182,4 +201,10 @@ prueba:
 - **El detector de ventana activa elige por área**, y una ventana secundaria
   más grande le gana a la de datos. Pasó al empezar con dos formas abiertas.
 - **`Ctrl+Shift+→` no selecciona** cuando las teclas se inyectan. Se vacía la
-  caja con `HOME` + `BACKSPACE` ×30.
+  caja con **`END`** + `BACKSPACE` ×30 (ver la entrada 0: con `HOME` no borra
+  nada).
+- **`canvas_de` puede devolver una medida transitoria.** Tras un lanzamiento
+  fallido dio 681×688 en vez de 1366×697, y `forms_click` rechazó un click
+  legítimo por salirse de ese canvas falso. Falló **del lado seguro** —se negó
+  en vez de pulsar a ciegas— pero le falta el reintento que sí tiene
+  `detectar_ventana_reintentando` por exactamente el mismo motivo.
