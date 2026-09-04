@@ -61,6 +61,40 @@ extract no anunció, se anota y se continúa con el resto.
 | Un viaje ida y vuelta por cada click, espera y captura | `forms_secuencia` ejecuta la tanda en una llamada |
 | Leer triggers a mano para saber qué botón era seguro | `forms_plan` clasifica el riesgo de los 54 botones |
 
+## Las capas
+
+```
+winauto.py    807   Win32, pixeles, ajustes            no sabe nada de MCP
+nucleo.py     104   configuracion, extract, contrato   depende solo de winauto
+plan.py       366   planificacion desde el .fmb        no toca la forma
+calibra.py    168   calibracion .fmb -> pixel
+server.py    1075   las 15 herramientas MCP
+```
+
+Cada capa depende solo de las de abajo. `nucleo.py` existe justamente para
+romper el círculo: si la configuración y el contrato vivieran en `server.py`,
+`plan.py` tendría que importar `server` y `server` importar `plan`.
+
+El servidor MCP se declara **solo** en `server.py`, así que `plan` y `calibra`
+se pueden importar desde una prueba sin levantar nada de MCP — que es lo que
+permite que 51 de las comprobaciones corran sin sesión de Forms.
+
+### El contrato de éxito y fallo
+
+Las herramientas devuelven texto, porque quien las lee es un modelo. El
+problema era que devolvían texto **también al fallar**, así que un lote tenía
+que adivinar por subcadenas si un paso había salido bien. Eso costó tres
+defectos en un solo día, y en dos de ellos se guardaron fotos con el nombre de
+una lista que nunca se abrió.
+
+Ahora cada fallo va prefijado con `[FALLO]` y cada aviso que invalida lo que
+venga detrás con `[AVISO]`. La lista de `marcas_fallo` queda como red de
+seguridad y, cuando salta, lo dice: *«…(por marcador de texto, sin token)»*.
+
+`pruebas_contrato.py` **audita el código fuente de las cuatro capas** y falla
+si alguien añade un retorno de fallo sin token. Ya cazó cuatro que se me
+escaparon en la conversión.
+
 ## Herramientas
 
 **15 herramientas**, agrupadas por lo que hacen:
@@ -98,8 +132,8 @@ equivocado, y ninguno de los dos daba error:
 | Un click **no mueve el foco** → el `Ctrl+L` siguiente abre la lista de otro campo. Pedí *Centro Costos* y salió *Barrios* | `forms_click_item` mira el **resalte amarillo** después de pulsar y avisa si no cubre el punto pulsado. Siempre, no a petición |
 | Un control **no se movió** → la pasada entera se hace creyendo que el estado cambió | `forms_capturar(comparar_con=...)`. Si sale `IDENTICAS` cuando se esperaba un cambio, el control no se movió |
 
-`forms_secuencia` **detiene el lote** ante cualquier aviso que empiece por
-`OJO`: seguir después de uno de estos solo produce fotos mal rotuladas.
+`forms_secuencia` **detiene el lote** ante `[FALLO]` o `[AVISO]`: seguir
+después de uno de estos solo produce fotos mal rotuladas.
 
 El mismo mecanismo decide si un control necesita **dos fotos**: se mide el área
 que cambió. `CAMBIO ESTRUCTURAL` (aparece una pestaña o un panel) → las dos
@@ -142,8 +176,16 @@ corrida de 90 fotos sería peor que el reinicio que evita.
 ```bash
 python pruebas_deteccion.py      # 19 comprobaciones, sin sesión de Forms
 python pruebas_ajustes.py        # 16 comprobaciones, sin sesión de Forms
+python pruebas_contrato.py       # 16 comprobaciones, sin sesión de Forms
 python verificar_entorno.py      # entorno + captura real
 ```
+
+**51 comprobaciones corren sin abrir SAFIX.** Dos de ellas no comprueban un
+resultado sino el **código**: `pruebas_contrato.py` audita las cuatro capas
+buscando retornos de fallo sin token, y `pruebas_ajustes.py` compara las claves
+contra `AJUSTES_DEFECTO` en vez de contra un número fijo — porque una prueba
+que hay que editar cada vez que el código crece acaba fallando por estar vieja,
+no por un defecto.
 
 `pruebas_deteccion.py` sintetiza las imágenes que necesita, así que corre en
 cualquier momento. Existe porque lo que verifica está puesto para cazar fallos

@@ -56,8 +56,13 @@ try:
     # ── 1. arranque ─────────────────────────────────────────────────────────
     print("\n1. Los valores del archivo llegan al codigo")
     a = w.ajustes()
-    comprobar("las 9 claves estan", len(
-        [k for k in w.AJUSTES_DEFECTO if k in a]) == 9, f"{len(a)} claves")
+    # Se compara contra AJUSTES_DEFECTO y no contra un numero fijo: la primera
+    # version decia "== 9" y quedo obsoleta en cuanto se anadieron las 4 claves
+    # del look&feel. Una prueba que hay que editar al crecer el codigo acaba
+    # fallando por estar vieja, no por un defecto.
+    faltan_claves = [k for k in w.AJUSTES_DEFECTO if k not in a]
+    comprobar("estan todas las claves de AJUSTES_DEFECTO", not faltan_claves,
+              f"{len(a)} claves, faltan {faltan_claves or 'ninguna'}")
     comprobar("sin avisos al leer el archivo bueno",
               w.ajustes_aviso() == "", repr(w.ajustes_aviso()))
 
@@ -82,8 +87,13 @@ try:
     print("\n3. Los marcadores de fallo tambien")
     d["marcas_fallo"] = [["pumpum", "marcador de prueba"]]
     escribir(d)
+    # Se compara con `in` y no con `==`: desde que existe el contrato de
+    # tokens, un motivo detectado por marcador de texto llega con su
+    # procedencia anadida ("... sin token"), y eso es informacion util, no un
+    # defecto.
+    m = server._es_fallo("todo bien pero pumpum")
     comprobar("un marcador nuevo detiene el lote",
-              server._es_fallo("todo bien pero pumpum") == "marcador de prueba")
+              m is not None and "marcador de prueba" in m, repr(m))
     comprobar("y los viejos ya no, si se quitaron",
               server._es_fallo("OJO foco EQUIVOCADO") is None)
     d["marcas_fallo"] = original["marcas_fallo"]

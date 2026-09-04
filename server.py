@@ -49,31 +49,28 @@ from mcp.server.mcpserver import MCPServer  # mcp 2.x: antes se llamaba FastMCP
 
 import winauto as w
 
-# ── configuracion ────────────────────────────────────────────────────────────
 
-RAIZ = os.path.dirname(os.path.abspath(__file__))
-# La raiz del proyecto NO se deduce de la ubicacion del servidor: este puede vivir
-# fuera del repo (p.ej. en Z:\J\...), y ahi subir tres niveles da una ruta absurda.
-# Se declara con FORMS_VISION_PROYECTO; el salto de tres niveles queda solo como
-# respaldo para cuando el servidor si esta dentro del repo.
-PROYECTO = os.environ.get(
-    "FORMS_VISION_PROYECTO",
-    os.path.abspath(os.path.join(RAIZ, "..", "..", "..")))
-SALIDA = os.environ.get(
-    "FORMS_VISION_SALIDA",
-    os.path.join(PROYECTO, "06-frontend", "forms", "_capturas"))
-JNLP = os.environ.get("FORMS_VISION_JNLP", r"C:\Scripdominio\SAFIXV4.jnlp")
+from nucleo import (JNLP, PROYECTO, RAIZ, SALIDA, TECLAS_BLOQUEADAS,
+                    TOKEN_AVISO, TOKEN_FALLO, _aviso, _cargar_items,
+                    _extract_de, _es_fallo, _fallo, _num)
+import plan
+import calibra
+from plan import (_analizar_rutas, _clasificar, _clase_control,
+                  _colapsar_rangos, _colapsar_rejilla,
+                  _elementos_de_seccion, _probablemente_obvio, _slug,
+                  _visibilidad_tabs)
+from calibra import (CALIBRACIONES, _calib_clave, _calib_guardar,
+                     _calib_leer, _calibrar, _contrastar_calibracion,
+                     _exigir_ventana_datos, _items_de,
+                     _ventana_datos)
 
-TECLAS_BLOQUEADAS = {
-    t.strip().upper()
-    for t in os.environ.get("FORMS_VISION_TECLAS_BLOQUEADAS", "F10,CTRL+S").split(",")
-    if t.strip()
-}
-
-
+# El servidor MCP se declara AQUI, en la capa que expone las herramientas.
+# nucleo.py no lo conoce a proposito: asi plan.py y calibra.py se pueden
+# importar desde una prueba sin levantar nada de MCP.
 mcp = MCPServer("forms-vision")
-w.set_dpi_awareness()
 
+# La ventana con la que se trabaja, recordada entre llamadas para no exigir el
+# hwnd en cada una.
 _ultimo_hwnd = None
 
 
@@ -160,36 +157,6 @@ def _bitacora(accion, detalle="", resultado="", avisos=None, nivel="ok"):
         pass
 
 
-def _extract_de(forma):
-    """Localiza la carpeta _extract_<forma>_fmb producida por extraer_forma.py."""
-    f = forma.lower().removesuffix(".fmb").removesuffix("_fmb")
-    patron = os.path.join(PROYECTO, "06-frontend", "forms", "**",
-                          f"_extract_{f}_fmb", "01_bloques.json")
-    hits = glob.glob(patron, recursive=True)
-    if not hits:
-        raise FileNotFoundError(
-            f"No hay extract de '{forma}'. Genera uno con:\n"
-            f"  python 06-frontend/forms/extraer_forma.py <ruta>/{f}.xml")
-    return os.path.dirname(hits[0])
-
-
-def _cargar_items(forma):
-    ruta = os.path.join(_extract_de(forma), "01_bloques.json")
-    bloques = json.load(open(ruta, encoding="utf-8"))
-    items = []
-    for b in bloques:
-        for it in (b.get("items") or []):
-            items.append({**it, "bloque": b.get("nombre")})
-    return items, ruta
-
-
-def _num(valor, defecto=None):
-    """Los atributos del .fmb llegan como texto y pueden venir vacios."""
-    try:
-        return float(str(valor).strip())
-    except (TypeError, ValueError):
-        return defecto
-
 
 # ── inspeccion ───────────────────────────────────────────────────────────────
 
@@ -202,11 +169,11 @@ def forms_ventanas() -> str:
     datos que forms_capturar(auto=True) va a recortar.
     """
     if w.escritorio_bloqueado():
-        return ("La sesión de Windows está BLOQUEADA. Desbloquea el equipo: "
+        return _fallo("la sesión de Windows está BLOQUEADA. Desbloquea el equipo: "
                 "sin escritorio activo no hay pixeles que leer.")
     wins = w.ventanas_java()
     if not wins:
-        return "No hay ventanas de Forms visibles."
+        return _fallo("no hay ventanas de Forms visibles.")
 
     out = []
     for v in wins:
@@ -295,7 +262,7 @@ def forms_abrir(jnlp: str = "", espera_seg: int = 90) -> str:
     """
     ruta = jnlp or JNLP
     if not os.path.exists(ruta):
-        return f"No existe el archivo JNLP: {ruta}"
+        return _fallo(f"no existe el archivo JNLP: {ruta}")
 
     previas = {v["hwnd"] for v in w.ventanas_java()}
 
@@ -343,8 +310,8 @@ def forms_foco(hwnd: str = "") -> str:
                 "capturar.")
     fg = w.ventana_al_frente()
     detalle = f" Tiene el foco {fg['exe']} ({fg['titulo']!r})." if fg else ""
-    return (f"No se logro enfocar 0x{h:X}.{detalle} Puede haber un diálogo "
-            "modal encima, o otra aplicación reteniendo el foco.")
+    return _fallo(f"no se logro enfocar 0x{h:X}.{detalle} Puede haber un "
+                  "diálogo modal encima, o otra aplicación reteniendo el foco.")
 
 
 def forms_esperar(segundos: float = 1.0) -> str:
@@ -391,9 +358,9 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
     h = _resolver(int(hwnd, 0) if hwnd else None)
     if not w.traer_al_frente(h):
         if w.escritorio_bloqueado():
-            return ("La sesión de Windows está BLOQUEADA: solo se capturaria la "
+            return _fallo("la sesión de Windows está BLOQUEADA: solo se capturaria la "
                     "pantalla de bloqueo. Desbloquea el equipo y reintenta.")
-        return ("No se pudo poner la ventana en primer plano; la captura saldria "
+        return _fallo("no se pudo poner la ventana en primer plano; la captura saldria "
                 "tapada o negra. Cierra el dialogo que este encima y reintenta.")
 
     (cl, ct, cr, cb), _ = w.canvas_de(h)
@@ -403,7 +370,7 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
     if auto:
         r = w.rect_ventana_activa(h)
         if r is None:
-            return ("No se pudo detectar la ventana activa dentro del canvas. "
+            return _fallo("no se pudo detectar la ventana activa dentro del canvas. "
                     "La causa mas frecuente NO es la deteccion: es que SAFIX "
                     "este en el menu, sin forma cargada — el menu no tiene "
                     "recuadro que recortar. Abre la forma y reintenta; si ya "
@@ -438,8 +405,9 @@ def forms_capturar(nombre: str = "", hwnd: str = "",
                     f"comparacion contra {os.path.basename(comparar_con)}: "
                     f"{d['veredicto']} ({pct:.2f}% de la superficie)")
                 if d["veredicto"] == "IDENTICAS":
-                    avisos.append("OJO: nada cambio. Si esperabas un cambio, "
-                                  "el control NO se movio: no sigas la pasada.")
+                    avisos.append(_aviso(
+                        "nada cambio. Si esperabas un cambio, el control NO se "
+                        "movio: no sigas la pasada."))
                 elif d["veredicto"] == "CAMBIO MENOR":
                     avisos.append("cambio de uno o dos campos: basta UNA foto; "
                                   "el detalle va en el texto del manual.")
@@ -549,408 +517,6 @@ def forms_tecla(combinacion: str, repeticiones: int = 1, hwnd: str = "") -> str:
         w.pulsar(combo)
         time.sleep(0.08)
     return f"Pulsada {combo}{f' x{n}' if n > 1 else ''}."
-
-
-# ── planificacion desde el extract ───────────────────────────────────────────
-
-# Verbos que ESCRIBEN o lanzan procesos: un boton que los contenga no se pulsa
-# nunca durante una sesion de fotos. Salio de encontrar un COMMIT dentro de
-# BTN_NUEVOHIJO en binmueb, a 30 px del boton que si habia que usar.
-# Los verbos que hacen peligroso a un boton viven en ajustes.json.
-VERBOS_SEGUROS = ("SHOW_VIEW", "SHOW_WINDOW", "GO_BLOCK", "EXECUTE_QUERY",
-                  "LIST_VALUES", "HIDE_VIEW", "GO_ITEM")
-
-
-def _visibilidad_tabs(textos):
-    """Tab pages que el codigo prende y apaga, y bajo que condicion.
-
-    Sin esto el plan exige foto de TODAS las tab pages declaradas en el
-    .fmb, y muchas forman juegos MUTUAMENTE EXCLUYENTES: en binmueb un solo
-    checkbox decide si se ven CONSOLIDADO/CONSOLIDADO_NIIF o bien
-    GENERAL/ESCRITURA/SALDOS/ESTATUS/OBLIGACIONES. Pedir las 14 a la vez es
-    pedir algo imposible.
-
-    Devuelve {tab: [(condicion, rama, valor)]}. La condicion se toma del IF
-    mas cercano hacia arriba: es una heuristica sobre el texto del PL/SQL,
-    no un analisis sintactico, y se reporta como tal.
-    """
-    import re as _re
-    fuera = {}
-    for texto in textos:
-        cond, rama = None, "then"
-        for linea in texto.splitlines():
-            l = linea.strip()
-            m = _re.match(r"IF\s+(.+?)\s+THEN", l, _re.I)
-            if m:
-                cond, rama = m.group(1).strip(), "then"
-                continue
-            if _re.match(r"ELSE\s*$", l, _re.I):
-                rama = "else"
-                continue
-            if _re.match(r"END\s+IF", l, _re.I):
-                cond, rama = None, "then"
-                continue
-            m = _re.search(r"set_tab_page_property\s*\(\s*'([^']+)'\s*,\s*"
-                           r"visible\s*,\s*(property_true|property_false)", l, _re.I)
-            if m:
-                tab = m.group(1).split(".")[-1].upper()
-                valor = m.group(2).lower().endswith("true")
-                fuera.setdefault(tab, []).append((cond or "(sin IF)", rama, valor))
-    return fuera
-
-
-def _analizar_rutas(cargar):
-    """Quien invoca a cada canvas/ventana, leyendo solo el extract.
-
-    Con esto el plan deja de ser una lista optimista de todo lo declarado y
-    puede decir por adelantado que NO tiene sentido intentar:
-
-      ROTA      se invoca un objetivo que no existe en el .fmb
-                (en binmueb: Show_view('INVERSION') y Show_view('PROMESA'))
-      HUERFANA  el objetivo existe pero NADIE lo invoca
-                (en binmueb: VALORES, FECHAS, CONCEPTOS)
-      ENCERRADA solo se invoca desde dentro de otra ventana secundaria
-                (en binmueb: WIN_PREDIO <-> WIN_FECHVAL_PREDIOS)
-    """
-    import re as _re
-
-    bloques = cargar("01_bloques.json")
-    canvases = cargar("07_canvases.json")
-    ventanas = cargar("11_ventanas.json")
-
-    donde = {}
-    for b in bloques:
-        for it in (b.get("items") or []):
-            donde[it["nombre"]] = (it.get("canvas") or "", it.get("tab_page") or "")
-
-    nombres_canvas = {c["nombre"].upper() for c in canvases}
-    nombres_ventana = {v["nombre"].upper() for v in ventanas}
-    ventana_del_canvas = {c["nombre"].upper(): (c.get("ventana") or "").upper()
-                          for c in canvases}
-
-    invocadores = {}
-    for archivo in ("02_triggers_form.json", "03_triggers_bloque.json",
-                    "04_triggers_item.json", "06_program_units.json"):
-        def recorrer(o, item_actual=None):
-            if isinstance(o, dict):
-                codigo = o.get("codigo") or o.get("cuerpo")
-                if isinstance(codigo, str):
-                    for verbo, obj in _re.findall(
-                            r"(show_view|show_window)\s*\(\s*'([^']+)'", codigo, _re.I):
-                        objetivo = obj.split(".")[-1].upper()
-                        cv, tab = donde.get(item_actual or "", ("", ""))
-                        invocadores.setdefault(objetivo, []).append(
-                            {"item": item_actual or "(program unit)",
-                             "canvas": cv, "tab": tab, "verbo": verbo.lower()})
-                for k, v in o.items():
-                    recorrer(v, k if k in donde else item_actual)
-            elif isinstance(o, list):
-                for v in o:
-                    recorrer(v, item_actual)
-        recorrer(cargar(archivo))
-
-    existentes = nombres_canvas | nombres_ventana
-    rotas = {k: v for k, v in invocadores.items() if k not in existentes}
-
-    def encerrada(objetivo):
-        """True si solo se invoca desde dentro de una ventana secundaria."""
-        invs = invocadores.get(objetivo, [])
-        if not invs:
-            return False
-        for i in invs:
-            win = ventana_del_canvas.get((i["canvas"] or "").upper(), "")
-            if not i["canvas"] or win in ("", "WIN_APLICACION"):
-                return False          # hay al menos un invocador accesible
-        return True
-
-    return {"invocadores": invocadores, "rotas": rotas,
-            "existentes": existentes, "encerrada": encerrada,
-            "ventana_del_canvas": ventana_del_canvas}
-
-
-# Prefijos de la nomenclatura XENCO. El nombre de cada foto es la RUTA DE
-# NAVEGACION acumulada, empezando por la pestana:
-#     NN_<pestana>_<radio/panel>_<prefijo>_<elemento>.png
-# Las etiquetas se leen de la PANTALLA, no del .fmb; lo que sale aqui es una
-# propuesta a partir del prompt, que suele coincidir pero no manda.
-# Los prefijos del nombre de archivo viven en ajustes.json.
-
-# Los items de SAFIX casi nunca declaran su tipo: lo HEREDAN de una clase de
-# propiedades, y el .fmb solo trae ItemType en el item que se desvia de ella.
-# En iplanosopt lo declara 1 de 301, asi que `tipo_visual` sale 'Text Item'
-# para 293 items — incluidos el grupo de radios, 64 casillas, 8 desplegables y
-# los botones. Clasificar por `tipo_visual` es clasificar por el valor por
-# defecto del extractor.
-#
-# `parent_name` (el ParentName del XML) SI dice de que clase hereda, y es la
-# senal fiable. `tipo_visual` se queda como respaldo para las formas donde el
-# item si declara su tipo.
-# El mapa parent_name -> clase vive en ajustes.json.
-
-# Sufijos de un extremo de rango. Los dos extremos abren la MISMA lista, asi
-# que se fotografia una vez y el nombre va sin el sufijo.
-# Los sufijos de rango viven en ajustes.json.
-
-
-def _clase_control(it, riesgo_boton):
-    """Que clase de control es, por `parent_name` y con `tipo_visual` de respaldo."""
-    parent = (it.get("parent_name") or "").upper()
-    tipo = it.get("tipo_visual") or ""
-    nombre = it["nombre"]
-
-    if it.get("radio_buttons") or tipo == "Radio Group" or parent == "RADIO_GROUP":
-        return "RADIO"
-    mapa = w.ajustes()["clase_por_parent"]
-    if parent in mapa:
-        clase = mapa[parent]
-        # Un item con LOV colgada manda sobre la clase heredada: hay campos
-        # TEXT_NORMAL con lov_name (VKPCODIGO, VMODULO) cuya flecha es un item
-        # aparte, y la foto que interesa es la lista.
-        if (clase.startswith("OMITIR") and it.get("lov_name")
-                and clase != "OMITIR_ESPEJO"):
-            return "LOV"
-        return clase
-    if it.get("lov_name"):
-        return "LOV"
-    if tipo == "Check Box":
-        return "CHECK"
-    if tipo == "List Item":
-        return "LISTA"
-    if nombre in riesgo_boton or tipo == "Push Button":
-        return "BOTON"
-    return "OMITIR_TEXTO"
-
-
-def _colapsar_rangos(elementos):
-    """Une los pares Inicial/Final que abren la misma lista.
-
-    En `optica` de iplanosopt hay 10 flechas azules y solo 5 listas reales:
-    Diseno, Tipo Lente, Clase Lente, Estilo Montura y Antireflejo, cada una
-    con su extremo inicial y su extremo final. Fotografiar las 10 produce
-    cinco parejas de fotos identicas.
-    """
-    def raiz(archivo):
-        for s in w.ajustes()["sufijos_rango"]:
-            if archivo.endswith(s):
-                return archivo[: -len(s)]
-        return None
-
-    vistos, fuera = {}, []
-    for e in elementos:
-        r = raiz(e["archivo"]) if e["clase"] in ("LOV", "LISTA") else None
-        if r is None:
-            fuera.append(e)
-            continue
-        if r in vistos:
-            otro = vistos[r]
-            otro["nota"] += f" · mismo par que {e['item']} (rango: una sola foto)"
-            otro["item"] += f" / {e['item']}"
-            continue
-        e = {**e, "archivo": r}
-        vistos[r] = e
-        fuera.append(e)
-    return _colapsar_rejilla(fuera)
-
-
-# Por encima de esto, un grupo de casillas es una REJILLA DE SELECCION, no un
-# juego de controles que cambian la pantalla. En `campos` de iplanosopt hay 59
-# ('Vendedor?', 'Grupo?', 'Lote?'...) y eligen que columnas lleva el archivo
-# plano: cambian el RESULTADO, no la forma. Listarlas una por una produce 59
-# filas de plan y tienta a tomar 118 fotos de la misma pantalla.
-# rejilla_minima vive en ajustes.json
-
-
-def _colapsar_rejilla(elementos):
-    """Reduce una rejilla de casillas a una fila, y sin foto propia."""
-    checks = [e for e in elementos if e["clase"] == "CHECK?"]
-    if len(checks) < w.ajustes()["rejilla_minima"]:
-        return elementos
-    muestra = ", ".join(e["etiqueta"] for e in checks[:4])
-    resto = [e for e in elementos if e["clase"] != "CHECK?"]
-    return resto + [{
-        "clase": "IGNORAR", "item": f"{len(checks)} casillas",
-        "etiqueta": f"{muestra}, …",
-        "archivo": "— (ya salen en la foto de la seccion)",
-        "nota": f"{len(checks)} casillas juntas = rejilla de seleccion: eligen "
-                "que sale en el RESULTADO, no cambian la forma. SIN foto "
-                "propia. Confirmalo con un diff sobre una: si diera CAMBIO "
-                "ESTRUCTURAL, entonces si son controles de pantalla",
-        "obvio": False,
-    }]
-
-
-def _slug(texto):
-    """Etiqueta de pantalla -> fragmento de nombre de archivo."""
-    import re as _re
-    t = (texto or "").strip().strip(":").lower()
-    for a, b in (("á", "a"), ("é", "e"), ("í", "i"), ("ó", "o"), ("ú", "u"),
-                 ("ñ", "n"), ("ü", "u")):
-        t = t.replace(a, b)
-    t = _re.sub(r"[^a-z0-9]+", "_", t).strip("_")
-    return t or "sin_nombre"
-
-
-def _probablemente_obvio(prompt, titulo_lov):
-    """True si el contenido de la LOV se adivina por la etiqueta del campo.
-
-    Regla del usuario: si los datos que muestra la LOV van acordes al nombre
-    del campo, se puede omitir la foto (campo 'Ciudad' -> lista de ciudades).
-    Es una SUGERENCIA: la decision final es de quien captura, mirando.
-    """
-    p, t = _slug(prompt), _slug(titulo_lov)
-    if not p or not t:
-        return False
-    return p == t or t.startswith(p) or p.startswith(t) or t == p + "s"
-
-
-def _elementos_de_seccion(bloques, lov_titulo, riesgo_boton, canvas, tab):
-    """Elementos fotografiables de una seccion, con su nombre propuesto."""
-    # La flecha azul es un item APARTE del campo al que pertenece, y se llama
-    # BTN_<CAMPO>. Sin esto el encabezado de iplanosopt listaba 6 LOVs para 3
-    # listas reales: el campo con su lov_name, y su flecha otra vez.
-    en_seccion = {
-        it["nombre"].upper()
-        for b in bloques for it in (b.get("items") or [])
-        if (it.get("canvas") or "") == canvas and (it.get("tab_page") or "") == tab
-    }
-
-    fuera = []
-    for b in bloques:
-        for it in (b.get("items") or []):
-            if (it.get("canvas") or "") != canvas:
-                continue
-            if (it.get("tab_page") or "") != tab:
-                continue
-            if (it.get("visible") or "true").lower() == "false":
-                continue
-
-            clase = _clase_control(it, riesgo_boton)
-            if clase.startswith("OMITIR"):
-                continue
-            # Flecha cuyo campo esta en la misma seccion: la foto ya sale por
-            # el campo, que ademas si tiene etiqueta.
-            if (clase == "LOV" and not it.get("lov_name")
-                    and it["nombre"].upper().startswith("BTN_")
-                    and it["nombre"].upper()[4:] in en_seccion):
-                continue
-            prompt = (it.get("prompt") or it.get("label") or "").strip(": ")
-            nombre = it["nombre"]
-            # Sin prompt no hay etiqueta de pantalla en el .fmb. Se cae al
-            # nombre interno pero MARCADO, para que quede claro que hay que
-            # leerlo de la captura y no usarlo tal cual en el archivo.
-            # El extract trae acentos mutilados: 'Dise?o Inicial' por 'Diseño'.
-            # Un '?' EN MEDIO de la etiqueta es una tilde perdida, no una
-            # pregunta ('Inconsistencias?' si acaba en ?, y es legitimo). Si se
-            # deja pasar, el archivo sale 'lov_dise_o'.
-            roto = "?" in prompt.rstrip("?")
-            etiqueta = (f"{prompt}  [acento mutilado]" if roto
-                        else prompt or f"? {nombre}")
-            base_nombre = ("<leer_en_pantalla>" if roto or not prompt
-                           else _slug(prompt))
-
-            if clase == "LOV":
-                titulo = lov_titulo.get(it.get("lov_name") or "", "")
-                fuera.append({
-                    "clase": "LOV", "item": nombre, "etiqueta": etiqueta,
-                    "archivo": w.ajustes()["prefijo"]["LOV"] + base_nombre,
-                    "nota": (f"LOV {it['lov_name']}" if it.get("lov_name")
-                             else "flecha azul (PBUTTON_LIST)")
-                            + (f" · titulo {titulo!r}" if titulo else ""),
-                    "obvio": _probablemente_obvio(prompt, titulo),
-                })
-            elif clase == "LISTA":
-                fuera.append({
-                    "clase": "LISTA", "item": nombre, "etiqueta": etiqueta,
-                    "archivo": w.ajustes()["prefijo"]["LISTA"] + base_nombre,
-                    "nota": "desplegable en el sitio; los valores solo se ven "
-                            "en ejecucion",
-                    "obvio": False,
-                })
-            elif clase == "LINK":
-                fuera.append({
-                    "clase": "LINK", "item": nombre, "etiqueta": etiqueta,
-                    "archivo": w.ajustes()["prefijo"]["LINK"] + base_nombre,
-                    "nota": "etiqueta clickeable: fotografiar lo que hace al pulsar",
-                    "obvio": False,
-                })
-            elif clase == "CHECK":
-                # Una casilla NO lleva foto por existir. Solo si al marcarla
-                # cambia la forma (aparecen campos, paneles o pestanas) o abre
-                # algo. Si lo unico que cambia es el recuadro, se ignora: la
-                # casilla ya se ve en la foto de la seccion.
-                fuera.append({
-                    "clase": "CHECK?", "item": nombre, "etiqueta": etiqueta,
-                    "archivo": w.ajustes()["prefijo"]["CHECK"] + base_nombre,
-                    "nota": "marcar y comparar. CAMBIO ESTRUCTURAL -> las dos "
-                            "versiones. CAMBIO MENOR (solo el recuadro) -> "
-                            "SIN FOTO, se ignora",
-                    "obvio": False,
-                })
-            elif clase == "RADIO":
-                radios = it.get("radio_buttons") or []
-                if radios:
-                    for rb in radios:
-                        et = (rb.get("label") or rb.get("nombre") or "")
-                        fuera.append({
-                            "clase": "RADIO", "item": f"{nombre}.{rb.get('nombre')}",
-                            "etiqueta": et,
-                            "archivo": w.ajustes()["prefijo"]["RADIO"] + _slug(et),
-                            "nota": f"valor {rb.get('valor')!r}",
-                            "obvio": False,
-                        })
-                else:
-                    fuera.append({
-                        "clase": "RADIO", "item": nombre,
-                        "etiqueta": "(no esta en el extract)",
-                        "archivo": w.ajustes()["prefijo"]["RADIO"] + "<leer_en_pantalla>",
-                        "nota": "el .fmb no trae las etiquetas: leerlas de la captura",
-                        "obvio": False,
-                    })
-            else:
-                # Ser boton se decide por TENER un WHEN-BUTTON-PRESSED, no por
-                # el tipo ni por el nombre: en SAFIX hay botones declarados como
-                # 'Text Item' y sin prefijo BTN_ (p.ej. PROTOCOLO en binmueb),
-                # y filtrarlos por nombre los dejaba fuera de la lista de
-                # peligrosos, que es justo donde tienen que estar.
-                riesgo, motivo = riesgo_boton.get(nombre, ("revisar", ""))
-                # El nombre interno ya suele traer BTN_: no duplicar el prefijo.
-                frag = base_nombre
-                if frag.startswith("btn_"):
-                    frag = frag[4:]
-                elif not prompt:
-                    frag = _slug(nombre).removeprefix("btn_") or "<leer_en_pantalla>"
-                if riesgo == "NO TOCAR":
-                    fuera.append({
-                        "clase": "PELIGRO", "item": nombre,
-                        "etiqueta": etiqueta, "archivo": "—",
-                        "nota": f"NO PULSAR: {motivo}", "obvio": False,
-                    })
-                else:
-                    fuera.append({
-                        "clase": "BOTON", "item": nombre, "etiqueta": etiqueta,
-                        "archivo": w.ajustes()["prefijo"]["BOTON"] + frag,
-                        "nota": (f"{riesgo}: {motivo}" if motivo else riesgo)
-                                + " · la VENTANA que abre, CON barra de titulo. "
-                                  "Nada de recortar el icono: sale de 0 KB",
-                        "obvio": False,
-                    })
-    return _colapsar_rangos(fuera)
-
-
-def _clasificar(codigo):
-    """(riesgo, motivo) de un WHEN-BUTTON-PRESSED."""
-    alto = [v for v in w.ajustes()["verbos_peligrosos"]
-            if v in codigo.upper()]
-    if alto:
-        return "NO TOCAR", "+".join(v.strip() for v in alto)
-    if "OPEN_FORM" in codigo.upper() or "CALL_FORM" in codigo.upper():
-        import re as _re
-        otras = _re.findall(r"(?:OPEN_FORM|CALL_FORM)\s*\(\s*'([^']+)'", codigo, _re.I)
-        return "otra forma", ",".join(otras) or "?"
-    seguros = [v for v in VERBOS_SEGUROS if v in codigo.upper()]
-    if seguros:
-        return "seguro", "+".join(seguros)
-    return "revisar", "sin verbo reconocido"
 
 
 @mcp.tool()
@@ -1203,22 +769,6 @@ def forms_plan(forma: str, seccion: str = "") -> str:
 # el CTRL+L siguiente disparo a ciegas y la captura se guardo con el nombre de
 # una LOV que no estaba abierta. Es el defecto de la foto 56 de IFACTURAOPT,
 # producido por la propia herramienta. Estos marcadores lo detienen.
-# Se comparan en MINUSCULA: la primera version distinguia mayusculas y se le
-# escapo "no se detecto la ventana activa" porque el marcador decia "No se
-# detecta". El lote siguio, CTRL+L disparo y la foto se guardo con el nombre
-# de una lista que nunca se abrio. Un marcador que falla por una tilde o una
-# mayuscula no es una guarda.
-# Los marcadores que detienen un lote viven en ajustes.json.
-
-
-def _es_fallo(salida):
-    """Motivo por el que un paso cuenta como fallo, o None si fue bien."""
-    bajo = salida.lower()
-    for marca, motivo in w.ajustes()["marcas_fallo"]:
-        if marca in bajo:
-            return motivo
-    return None
-
 
 @mcp.tool()
 def forms_secuencia(pasos: str) -> str:
@@ -1303,159 +853,6 @@ def forms_secuencia(pasos: str) -> str:
 # Calibraciones por (forma, canvas, tab). Son relativas a la ventana, asi que
 # sobreviven a que la ventana se mueva. Se guardan en disco para que valgan
 # entre invocaciones y se puedan inspeccionar.
-CALIBRACIONES = os.path.join(RAIZ, "calibraciones.json")
-
-
-def _calib_leer():
-    if os.path.exists(CALIBRACIONES):
-        try:
-            return json.load(open(CALIBRACIONES, encoding="utf-8"))
-        except (OSError, ValueError):
-            return {}
-    return {}
-
-
-# Tamano de la ventana de DATOS por hwnd, aprendido al calibrar (calibrar solo
-# tiene sentido sobre la ventana de datos, nunca sobre un recuadro).
-#
-# Existe por un fallo que costo tres capturas basura: quedo un mensaje encima,
-# y click_item calculo el pixel del item respecto al MENSAJE en vez de a la
-# ventana de datos. El click se fue a (1014,490), la forma respondio "El campo
-# no se puede actualizar", y las tres capturas siguientes se guardaron con
-# nombre de LOV. Las coordenadas de un item solo significan algo si delante
-# esta la ventana de datos.
-_ventana_datos = {}
-
-
-def _exigir_ventana_datos(hwnd, minimo=0.8):
-    """Motivo por el que NO se puede pulsar por coordenadas, o None."""
-    v = w.detectar_ventana_reintentando(hwnd)
-    if v is None:
-        return ("no se detecta ninguna ventana activa: no se pulsa a ciegas")
-    esperada = _ventana_datos.get(hwnd)
-    if esperada is None:
-        return None                      # sin referencia todavia: se confia
-    area, area_esp = v["ancho"] * v["alto"], esperada[0] * esperada[1]
-    if area < area_esp * minimo:
-        return (f"hay un recuadro encima ({v['ancho']}x{v['alto']}, y la "
-                f"ventana de datos mide {esperada[0]}x{esperada[1]}). Las "
-                f"coordenadas del item no valen contra un recuadro: cierralo "
-                f"con forms_cerrar_popup y reintenta")
-    return None
-
-
-def _calib_clave(forma, canvas, tab, estado=""):
-    """Clave de la calibracion, con el ESTADO dentro.
-
-    El estado va en la clave porque la calibracion se ajusta contra los
-    rectangulos BLANCOS de los campos habilitados, y un checkbox que
-    deshabilita medio bloque cambia ese juego de referencias. Sin el estado,
-    la misma entrada cachearia dos geometrias distintas y los clicks de la
-    segunda pasada caerian desplazados, sin ningun error visible.
-    """
-    return f"{forma.lower()}|{canvas}|{tab}" + (f"|{estado}" if estado else "")
-
-
-def _calib_guardar(forma, canvas, tab, cal, estado=""):
-    d = _calib_leer()
-    d[_calib_clave(forma, canvas, tab, estado)] = cal
-    with open(CALIBRACIONES, "w", encoding="utf-8") as f:
-        json.dump(d, f, ensure_ascii=False, indent=2)
-
-
-def _items_de(forma, canvas, tab):
-    fuera = []
-    for b in json.load(open(os.path.join(_extract_de(forma), "01_bloques.json"),
-                            encoding="utf-8")):
-        for it in (b.get("items") or []):
-            if (it.get("canvas") or "") != canvas:
-                continue
-            if (it.get("tab_page") or "") != tab:
-                continue
-            if (it.get("visible") or "true").lower() == "false":
-                continue
-            fuera.append(it)
-    return fuera
-
-
-def _calibrar(forma, canvas, tab, hwnd, estado=""):
-    """Ajusta unidades del .fmb -> pixeles buscando el MEJOR ENCAJE.
-
-    Se detectan los campos blancos de la pantalla y se busca la escala y el
-    desplazamiento que hacen coincidir el maximo de items declarados, usando
-    el residuo como desempate.
-
-    Por que asi y no midiendo dos puntos a mano: medir a ojo deja +-5 px de
-    error que se propagan y desvian un click 11 px — suficiente para fallar
-    una flecha de LOV de 12 px. Con este ajuste el residuo baja a 0.5 px.
-
-    El ancho se compara con tolerancia AMPLIA: el area blanca no incluye el
-    borde del campo, asi que es mas estrecha que el ancho declarado. Lo que
-    ajusta es la posicion.
-    """
-    v = w.detectar_ventana_reintentando(hwnd)
-    if v is None:
-        return None, "No se detecta la ventana activa: no se puede calibrar."
-    # OJO con el ORDEN: la referencia de "ventana de datos" se apunta al FINAL,
-    # cuando el ajuste ya salio bien. Apuntarla aqui envenenaba la guarda: con
-    # un mensaje de 321x155 delante, la calibracion fallaba por falta de campos
-    # PERO ya habia registrado 321x155 como la ventana de datos, y a partir de
-    # ahi forms_cerrar_popup contestaba "delante esta la ventana de datos" con
-    # el mensaje encima. Paso el 2026-09-03.
-    campos = w.detectar_campos(hwnd, v)
-    if len(campos) < 3:
-        return None, (f"Solo {len(campos)} campos blancos detectados; hacen falta "
-                      "al menos 3. Puede que la seccion no tenga campos "
-                      "editables en este estado.")
-
-    esperados = []
-    for it in _items_de(forma, canvas, tab):
-        try:
-            x, y, a = int(it["x"]), int(it["y"]), int(it.get("ancho") or 0)
-        except (ValueError, KeyError, TypeError):
-            continue
-        if a >= 40:
-            esperados.append((x, y, a))
-    if len(esperados) < 3:
-        return None, "El .fmb declara menos de 3 campos anchos en esta seccion."
-
-    def puntuar(escala, ox, oy):
-        aciertos, residuo = 0, 0.0
-        for x, y, a in esperados:
-            px_, py_, pa = ox + x * escala, oy + y * escala, a * escala
-            for cx, cy, ca, _ in campos:
-                if abs(cx - px_) <= 3 and abs(cy - py_) <= 4 and abs(ca - pa) <= 30:
-                    aciertos += 1
-                    residuo += abs(cx - px_) + abs(cy - py_)
-                    break
-        return aciertos, (residuo / aciertos if aciertos else 1e9)
-
-    mejor = (0, 1e9, None, None, None)
-    for e in range(1280, 1400, 5):
-        escala = e / 1000.0
-        for ox in range(-20, 60):
-            for oy in range(20, 130):
-                n, res = puntuar(escala, ox, oy)
-                if n and ((n > mejor[0]) or (n == mejor[0] and res < mejor[1])):
-                    mejor = (n, res, escala, ox, oy)
-
-    n, res, escala, ox, oy = mejor
-    if n < 3 or res > 3:
-        return None, (f"Ajuste pobre: {n} encajes con residuo {res:.1f} px. "
-                      "No se usa para no pulsar a ciegas.")
-    cal = {"escala": escala, "off_x": ox, "off_y": oy,
-           "encajes": n, "de": len(esperados), "residuo": round(res, 2),
-           "fecha": dt.datetime.now().isoformat(timespec="seconds")}
-    _calib_guardar(forma, canvas, tab, cal, estado)
-    # Ahora si: el ajuste encajo, asi que esta ES la ventana de datos. Se
-    # guarda la de MAYOR AREA vista, porque una ventana secundaria puede ser
-    # mas ancha (Componentes mide 666x423) pero no mas grande.
-    previa = _ventana_datos.get(hwnd)
-    if previa is None or v["ancho"] * v["alto"] > previa[0] * previa[1]:
-        _ventana_datos[hwnd] = (v["ancho"], v["alto"])
-    return cal, None
-
-
 @mcp.tool()
 def forms_calibrar(forma: str, canvas: str = "CNV_TAB", tab: str = "",
                    hwnd: str = "", estado: str = "") -> str:
@@ -1490,35 +887,6 @@ def forms_calibrar(forma: str, canvas: str = "CNV_TAB", tab: str = "",
 # (cuatro calibraciones independientes coincidieron). Los clicks salian 27 px
 # abajo y el boton no se pulsaba — sin ningun error.
 # encajes_fiables vive en ajustes.json
-
-
-def _contrastar_calibracion(forma, canvas, tab, estado, cal):
-    """Compara el ajuste nuevo con los del mismo canvas y avisa si discrepa."""
-    todas = _calib_leer()
-    mia = _calib_clave(forma, canvas, tab, estado)
-    prefijo = f"{forma.lower()}|{canvas}|"
-    otras = [(k, v) for k, v in todas.items()
-             if k.startswith(prefijo) and k != mia]
-    if not otras:
-        return ""
-    k, mejor = max(otras, key=lambda kv: kv[1].get("encajes", 0))
-    desvia = (abs(mejor["off_x"] - cal["off_x"]) > 3
-              or abs(mejor["off_y"] - cal["off_y"]) > 3
-              or abs(mejor["escala"] - cal["escala"]) > 0.005)
-    if not desvia:
-        return ""
-    if (cal["encajes"] < w.ajustes()["encajes_fiables"]
-            and mejor["encajes"] > cal["encajes"]):
-        _calib_guardar(forma, canvas, tab, mejor, estado)
-        return ("  OJO: este ajuste discrepa de los demas del canvas y se apoya "
-                f"en solo {cal['encajes']} encajes. Se GUARDO en su lugar el de "
-                f"'{k}' (escala {mejor['escala']}, off {mejor['off_x']},"
-                f"{mejor['off_y']}, {mejor['encajes']} encajes), que es el que "
-                "concuerda. Un desplazamiento mal ajustado desvia todos los "
-                "clicks sin dar ningun error.")
-    return (f"  OJO: discrepa de '{k}' (escala {mejor['escala']}, off "
-            f"{mejor['off_x']},{mejor['off_y']}). Comprueba un click antes de "
-            "encadenar capturas.")
 
 
 @mcp.tool()
@@ -1557,7 +925,7 @@ def forms_click_item(forma: str, item: str, canvas: str = "CNV_TAB",
                         f"{cal['residuo']} px): esta seccion no tiene "
                         f"suficientes campos blancos propios.\n")
     if cal is None:
-        return (f"Falta calibrar {canvas}/{tab or '(sin tab)'}"
+        return _fallo(f"falta calibrar {canvas}/{tab or '(sin tab)'}"
                 + (f" en el estado '{estado}'" if estado else "") + ". "
                 + f"Llama primero a forms_calibrar('{forma}', tab='{tab}'"
                 + (f", estado='{estado}'" if estado else "") + ").")
@@ -1577,7 +945,7 @@ def forms_click_item(forma: str, item: str, canvas: str = "CNV_TAB",
         if rb is None:
             disponibles = [r.get("nombre") for r in
                            (objetivo.get("radio_buttons") or [])]
-            return (f"'{item}' no tiene el radio '{radio}'. "
+            return _fallo(f"'{item}' no tiene el radio '{radio}'. "
                     f"Tiene: {', '.join(disponibles) or '(ninguno)'}")
         # Un radio es un circulo pequeno con su etiqueta a la derecha: el
         # punto de click va sobre el circulo, no en el centro de la etiqueta.
@@ -1587,7 +955,7 @@ def forms_click_item(forma: str, item: str, canvas: str = "CNV_TAB",
     if objetivo is None:
         nombres = [i["nombre"] for i in _items_de(forma, canvas, tab)
                    if item.upper() in i["nombre"].upper()][:8]
-        return (f"No existe '{item}' en {canvas}/{tab}."
+        return _fallo(f"no existe '{item}' en {canvas}/{tab}."
                 + (f" Parecidos: {', '.join(nombres)}" if nombres else ""))
 
     # Guarda de riesgo: se mira el codigo real del boton, no su nombre.
@@ -1602,19 +970,21 @@ def forms_click_item(forma: str, item: str, canvas: str = "CNV_TAB",
                     continue
                 riesgo, motivo = _clasificar(tr.get("codigo") or "")
                 if riesgo == "NO TOCAR":
-                    return (f"NO se pulsa '{item}': su codigo contiene {motivo}. "
-                            "Escribe en la base de datos o lanza un proceso.")
+                    return _fallo(
+                        f"no se pulsa '{item}': su codigo contiene {motivo}. "
+                        "Escribe en la base de datos o lanza un proceso.")
 
     try:
         fx, fy = int(objetivo["x"]), int(objetivo["y"])
     except (ValueError, KeyError, TypeError):
-        return f"'{item}' no declara posicion en el .fmb; no se puede calcular."
+        return _fallo(f"'{item}' no declara posicion en el .fmb; no se puede "
+                      "calcular.")
     fa = int(objetivo.get("ancho") or 0) or 14
     fh = int(objetivo.get("alto") or 0) or 14
 
     estorbo = _exigir_ventana_datos(h)
     if estorbo:
-        return f"NO se pulsa '{item}': {estorbo}."
+        return _fallo(f"no se pulsa '{item}': {estorbo}.")
 
     e, ox, oy = cal["escala"], cal["off_x"], cal["off_y"]
     cx = int(ox + (fx + fa / 2) * e)
@@ -1674,13 +1044,13 @@ def _verificar_foco(hwnd, cx, cy, tolerancia=6, espera=0.4):
     donde = f"({f['x']},{f['y']}) {f['ancho']}x{f['alto']} color {f['color']}"
     if dentro:
         return f"foco OK: el resalte cubre el punto pulsado — {donde}"
-    return ("OJO foco EQUIVOCADO: el resalte esta en " + donde +
+    return _aviso("foco EQUIVOCADO: el resalte esta en " + donde +
             f", no en ({cx},{cy}). El click no movio el foco: un Ctrl+L ahora "
             "abriria la lista de otro campo. Repite el click o salta el elemento.")
 
 
 @mcp.tool()
-def forms_cerrar_popup(hwnd: str = "", ancho_datos: int = 600,
+def forms_cerrar_popup(hwnd: str = "", ancho_datos: int = 0,
                        intentos: int = 3) -> str:
     """Cierra el recuadro que este encima (LOV, mensaje) y deja la forma libre.
 
@@ -1708,7 +1078,7 @@ def forms_cerrar_popup(hwnd: str = "", ancho_datos: int = 600,
     # clicar a ciegas, cada iteracion identifica el recuadro por su tamano.
     cerrados = []
     for i in range(max(1, intentos)):
-        r = _cerrar_uno(hwnd, ancho_datos)
+        r = _cerrar_uno(hwnd, ancho_datos or None)
         if r.startswith("Cerrado"):
             cerrados.append(r)
             continue
@@ -1720,12 +1090,15 @@ def forms_cerrar_popup(hwnd: str = "", ancho_datos: int = 600,
     return " | ".join(cerrados) or r
 
 
-def _cerrar_uno(hwnd, ancho_datos):
+def _cerrar_uno(hwnd, ancho_datos=None):
     h = _resolver(int(hwnd, 0) if hwnd else None)
     _exigir_frente(h)
+    aj = w.ajustes()
+    if ancho_datos is None:
+        ancho_datos = aj["ancho_datos_respaldo"]
     v = w.detectar_ventana_reintentando(h)
     if v is None:
-        return "No se detecta ningun recuadro; nada que cerrar."
+        return "no se detecta ningun recuadro; nada que cerrar."
 
     datos = _ventana_datos.get(h)
     if datos:
@@ -1742,15 +1115,14 @@ def _cerrar_uno(hwnd, ancho_datos):
     if es_datos:
         return (f"Delante esta la ventana de datos ({v['ancho']}x{v['alto']}): "
                 "no hay recuadro que cerrar.")
-    if v["alto"] > 250:
-        # Cancel medido en el recuadro de 466x326: ocupa x 303..347, centro
-        # 325 = 69.7%. La primera version usaba 74.7% (x 348), UN PIXEL fuera
-        # del borde derecho: cerraba unas veces y otras no, y una LOV que se
-        # queda abierta se lleva por delante todo lo que venga detras.
-        # NUNCA se pulsa OK: eso SELECCIONA un valor y lo escribe en el campo.
-        fx, fy, tipo, boton = 0.697, 0.936, "LOV", "Cancel"
+    # Las posiciones de los botones viven en ajustes.json: son del look&feel de
+    # SAFIX, no del codigo. El 0,697 de Cancel ya fallo una vez por UN pixel.
+    if v["alto"] > aj["popup_alto_lov"]:
+        fx, fy = aj["popup_lov_cancel"]
+        tipo, boton = "LOV", "Cancel"
     else:
-        fx, fy, tipo, boton = 0.84, 0.84, "mensaje", "Aceptar"
+        fx, fy = aj["popup_mensaje_aceptar"]
+        tipo, boton = "mensaje", "Aceptar"
     cx, cy = int(v["ancho"] * fx), int(v["alto"] * fy)
     forms_click(x=cx, y=cy, hwnd=hwnd, relativo=True)
     time.sleep(1.2)
@@ -1758,7 +1130,7 @@ def _cerrar_uno(hwnd, ancho_datos):
     sigue = (v2 and abs(v2["ancho"] - datos[0]) > 8 if datos
              else v2 and v2["ancho"] < ancho_datos)
     if sigue:
-        return (f"Se pulso {boton} del {tipo} pero sigue habiendo un recuadro "
+        return _aviso(f"se pulso {boton} del {tipo} pero sigue habiendo un recuadro "
                 f"({v2['ancho']}x{v2['alto']}). Miralo antes de seguir.")
     return f"Cerrado el {tipo} ({v['ancho']}x{v['alto']}) con {boton}."
 
@@ -1782,10 +1154,10 @@ def forms_tabs(hwnd: str = "") -> str:
         return forms_foco(hwnd)
     v = w.detectar_ventana_reintentando(h)
     if v is None:
-        return "No se detecto la ventana activa."
+        return _fallo("no se detecto la ventana activa.")
     tabs = w.detectar_tabs(h, v)
     if not tabs:
-        return ("No se detecto tira de pestanas. Puede que esta forma no "
+        return _fallo("no se detecto tira de pestanas. Puede que esta forma no "
                 "tenga tab canvas, o que la ventana este muy estrecha.")
     filas = [f"ventana: x={v['x']} y={v['y']} {v['ancho']}x{v['alto']}",
              f"tira detectada en y={tabs[0]['y']} (relativo a la ventana)",
@@ -1814,7 +1186,7 @@ def forms_pendientes(forma: str, carpeta_fotos: str, carpeta_pendientes: str) ->
         fotos = sorted(f for f in os.listdir(carpeta_fotos)
                        if f.lower().endswith(".png"))
     except OSError as e:
-        return f"No se pudo leer {carpeta_fotos}: {e}"
+        return _fallo(f"no se pudo leer {carpeta_fotos}: {e}")
 
     os.makedirs(carpeta_pendientes, exist_ok=True)
     destino = os.path.join(carpeta_pendientes, f"{forma.upper()}.txt")

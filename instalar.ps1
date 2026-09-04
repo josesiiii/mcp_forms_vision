@@ -29,13 +29,19 @@ $local = Join-Path $env:LOCALAPPDATA "forms-vision"
 $venv  = Join-Path $env:LOCALAPPDATA "forms-vision-venv"
 $py    = Join-Path $venv "Scripts\python.exe"
 
-# Lo que se instala. calibraciones.json NO esta a proposito: es estado de cada
-# maquina y el servidor lo crea al primer forms_calibrar.
-$fuentes = @(
-    "server.py", "winauto.py", "verificar_entorno.py", "pruebas_deteccion.py",
-    "pruebas_ajustes.py", "auditar_fotos.py", "probe_forms.py",
-    "ajustes.json", "requirements.txt", "README.md", "PROMPT-fotos-guia.md"
-)
+# Lo que se instala se DERIVA de lo que hay en el repo, no se enumera a mano:
+# la lista escrita a mano se quedo atras en cuanto server.py se partio en
+# nucleo/plan/calibra, y una instalacion sin uno de esos modulos deja el MCP
+# sin arrancar.
+#
+# calibraciones.json queda EXCLUIDO a proposito: es estado de cada maquina
+# (geometria medida contra esta pantalla) y el servidor lo crea al primer
+# forms_calibrar. Copiarlo desviaria los clicks en otra maquina.
+$excluir = @("calibraciones.json")
+$fuentes = Get-ChildItem $PSScriptRoot -File |
+    Where-Object { $_.Extension -in @(".py", ".json", ".md", ".txt") } |
+    Where-Object { $_.Name -notin $excluir } |
+    ForEach-Object { $_.Name }
 
 # ── 1. entorno ───────────────────────────────────────────────────────────────
 if (-not $SoloCodigo) {

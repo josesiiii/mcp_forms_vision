@@ -74,6 +74,24 @@ AJUSTES_DEFECTO = {
                       "_desde", "_hasta"],
     "rejilla_minima": 8,
     "encajes_fiables": 5,
+    # Donde estan los botones de los recuadros de SAFIX, en FRACCION del
+    # recuadro. Son del look&feel (Oracle, colorScheme SWAN): otra instalacion
+    # con otro tema los tendria en otro sitio, y por eso son datos y no codigo.
+    #
+    # Medido en el recuadro de 466x326: Cancel ocupa x 303..347, centro 325 =
+    # 69,7%. La primera version usaba 74,7% (x 348), UN PIXEL fuera del borde:
+    # cerraba unas veces y otras no, y una LOV que se queda abierta se lleva
+    # por delante todo lo que venga detras.
+    #
+    # NUNCA se pulsa OK/Aceptar de una LOV: eso SELECCIONA un valor y lo
+    # escribe en el campo.
+    "popup_lov_cancel": [0.697, 0.936],
+    "popup_mensaje_aceptar": [0.84, 0.84],
+    # Por encima de este alto, el recuadro es una LOV; por debajo, un mensaje.
+    "popup_alto_lov": 250,
+    # Ancho minimo para tomar un recuadro por la ventana de datos, SOLO cuando
+    # todavia no se ha calibrado y no hay tamano aprendido con el que comparar.
+    "ancho_datos_respaldo": 600,
     "verbos_peligrosos": [
         "COMMIT", "DELETE_RECORD", "FORMS_DDL", "PU_HEREDAR",
         "CREAR_ENCUESTA", "RUN_PRODUCT", "APU_REPORTES",

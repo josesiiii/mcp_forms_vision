@@ -132,5 +132,16 @@
     "INSERT ",
     "UPDATE ",
     "DELETE FROM"
-  ]
+  ],
+  "_popup": "Posicion de los botones de los recuadros, en FRACCION del recuadro. Son del look&feel de SAFIX (Oracle, colorScheme SWAN): otra instalacion los tendria en otro sitio. El 0,697 de Cancel ya fallo una vez por UN pixel. NUNCA se pulsa OK/Aceptar de una LOV: eso SELECCIONA un valor y lo escribe.",
+  "popup_lov_cancel": [
+    0.697,
+    0.936
+  ],
+  "popup_mensaje_aceptar": [
+    0.84,
+    0.84
+  ],
+  "popup_alto_lov": 250,
+  "ancho_datos_respaldo": 600
 }
