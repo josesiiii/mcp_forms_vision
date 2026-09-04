@@ -742,7 +742,12 @@ def forms_plan(forma: str, seccion: str = "") -> str:
         etiqueta = ("win_" if es_win else "apilado_") + cv.lower()
         cuantos = len(destino[(cv, tab)])
 
-        if not invs:
+        # La pantalla de apertura no la invoca nadie, y exigirle un llamador la
+        # mandaba a HUERFANA: la foto que mas falta hacia era justo la que no se
+        # pedia. Se comprueba ANTES que la ausencia de invocadores.
+        es_raiz = clave in rutas["canvas_raiz"]
+
+        if not invs and not es_raiz:
             descartadas.append((etiqueta, cuantos, "HUERFANA",
                                 "existe pero NADIE la invoca en el extract"))
             continue
@@ -754,8 +759,12 @@ def forms_plan(forma: str, seccion: str = "") -> str:
 
         n += 1
         origen = sorted({f"{i['item']}@{i['tab'] or i['canvas'] or '-'}" for i in invs})
-        if es_win:
-            vt = titulo_ventana.get(ventana_de.get(cv, ""), "") or ventana_de.get(cv, "")
+        vt = titulo_ventana.get(ventana_de.get(cv, ""), "") or ventana_de.get(cv, "")
+        if es_raiz:
+            # Se dice "pantalla inicial" y no "ventana X" porque no hay nada que
+            # pulsar para llegar: es lo que se ve al abrir la forma.
+            como = f"pantalla inicial{(' — ' + vt) if vt else ''}"
+        elif es_win:
             como = f"ventana {vt}"
         else:
             como = f"desde {origen[0]}"

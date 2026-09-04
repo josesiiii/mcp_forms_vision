@@ -21,6 +21,11 @@ from nucleo import _extract_de  # noqa: F401
 VERBOS_SEGUROS = ("SHOW_VIEW", "SHOW_WINDOW", "GO_BLOCK", "EXECUTE_QUERY",
                   "LIST_VALUES", "HIDE_VIEW", "GO_ITEM")
 
+# Convencion SAFIX: la ventana raiz de toda forma se llama asi. Estaba escrita
+# a mano dentro de `encerrada`; ahora tiene un nombre, porque el analisis de
+# alcance la necesita en dos sitios y ninguno debe poder quedarse atras.
+VENTANA_RAIZ = "WIN_APLICACION"
+
 
 def _visibilidad_tabs(textos):
     """Tab pages que el codigo prende y apaga, y bajo que condicion.
@@ -72,6 +77,13 @@ def _analizar_rutas(cargar):
                 (en binmueb: VALORES, FECHAS, CONCEPTOS)
       ENCERRADA solo se invoca desde dentro de otra ventana secundaria
                 (en binmueb: WIN_PREDIO <-> WIN_FECHVAL_PREDIOS)
+
+    Devuelve tambien `canvas_raiz`: los canvas que NO NECESITAN invocacion
+    porque Forms los muestra al abrir la forma. Sin esa excepcion, la PANTALLA
+    PRINCIPAL se clasificaba HUERFANA por no encontrarle un llamador — medido
+    en el modulo Portafolio: 6 de las 10 formas, 148 items visibles que el plan
+    no habria pedido fotografiar nunca. binmueb no lo destapo porque su
+    contenido colgaba de tab pages, que si se reconocen.
     """
     import re as _re
 
@@ -113,6 +125,20 @@ def _analizar_rutas(cargar):
     existentes = nombres_canvas | nombres_ventana
     rotas = {k: v for k, v in invocadores.items() if k not in existentes}
 
+    # Los dos caminos por los que un canvas es la pantalla de apertura. Hay que
+    # aceptar ambos porque el .fmb no es uniforme: fcalifica declara
+    # WIN_APLICACION.canvas_primario = CNV_CALIFICACIONES, mientras fvalora deja
+    # canvas_primario vacio y su CG$PAGE_1 solo se reconoce por colgar de la
+    # ventana raiz. Los apilados quedan FUERA a proposito: esos si necesitan que
+    # alguien los muestre.
+    canvas_raiz = {(v.get("canvas_primario") or "").upper()
+                   for v in ventanas
+                   if v["nombre"].upper() == VENTANA_RAIZ
+                   and (v.get("canvas_primario") or "")}
+    canvas_raiz |= {c["nombre"].upper() for c in canvases
+                    if (c.get("ventana") or "").upper() == VENTANA_RAIZ
+                    and str(c.get("tipo", "")).lower() != "stacked"}
+
     def encerrada(objetivo):
         """True si solo se invoca desde dentro de una ventana secundaria."""
         invs = invocadores.get(objetivo, [])
@@ -120,13 +146,14 @@ def _analizar_rutas(cargar):
             return False
         for i in invs:
             win = ventana_del_canvas.get((i["canvas"] or "").upper(), "")
-            if not i["canvas"] or win in ("", "WIN_APLICACION"):
+            if not i["canvas"] or win in ("", VENTANA_RAIZ):
                 return False          # hay al menos un invocador accesible
         return True
 
     return {"invocadores": invocadores, "rotas": rotas,
             "existentes": existentes, "encerrada": encerrada,
-            "ventana_del_canvas": ventana_del_canvas}
+            "ventana_del_canvas": ventana_del_canvas,
+            "canvas_raiz": canvas_raiz}
 
 
 # Prefijos de la nomenclatura XENCO. El nombre de cada foto es la RUTA DE
