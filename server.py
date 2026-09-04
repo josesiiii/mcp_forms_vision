@@ -128,6 +128,12 @@ def _exigir_frente(hwnd):
 def _foto_repetida(ruta):
     """Nombre de una foto ya guardada IDENTICA a la de `ruta`, o None.
 
+    Las capturas de TRABAJO quedan fuera: las que empiezan por '_' son bases
+    de comparacion y verificaciones de estado, y es NORMAL que salgan iguales
+    -una base del estado cerrado es identica a la anterior si nada cambio-.
+    Tratarlas como duplicado paraba el lote sin motivo: paso al preparar
+    esoporte. El dedupe existe para el ENTREGABLE, no para el borrador.
+
     Existe porque abrir dos veces la misma lista es el gasto mas facil de
     cometer y el mas tarde en notarse: en fmovimie se abrio 'Plan de Cuentas'
     desde dos campos distintos -CGFK$CUENTAS y LOV_TCPLANCUENTAS, dos LOV del
@@ -135,13 +141,15 @@ def _foto_repetida(ruta):
     los hashes al final, con la forma ya cerrada.
     """
     import hashlib
+    yo = os.path.basename(ruta)
+    if yo.startswith("_"):
+        return None
     try:
         with open(ruta, "rb") as f:
             mio = hashlib.sha256(f.read()).digest()
     except OSError:
         return None
     carpeta = os.path.dirname(os.path.abspath(ruta))
-    yo = os.path.basename(ruta)
     try:
         vecinos = sorted(os.listdir(carpeta))
     except OSError:

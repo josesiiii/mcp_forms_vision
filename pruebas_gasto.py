@@ -85,6 +85,17 @@ try:
     comprobar("una ruta inexistente devuelve None y no revienta",
               server._foto_repetida(os.path.join(tmp, "nada.png")) is None)
 
+    # Las capturas de TRABAJO empiezan por '_' y es normal que salgan iguales:
+    # una base del estado cerrado es identica a la anterior si nada cambio.
+    # Tratarlas como duplicado paraba el lote sin motivo.
+    borrador = png("_base.png", (10, 60, 120))     # identica a 01_lista.png
+    comprobar("una captura de trabajo (empieza por '_') NO se marca",
+              server._foto_repetida(borrador) is None,
+              server._foto_repetida(borrador))
+    comprobar("y tampoco cuenta como gemela de un entregable",
+              server._foto_repetida(a) == "02_otra_lista.png",
+              server._foto_repetida(a))
+
     # ── 2. la escala amplia de verdad ───────────────────────────────────────
     print("\n2. La escala amplia la imagen antes de guardarla")
     real = w._grab
