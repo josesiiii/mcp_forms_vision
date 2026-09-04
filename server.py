@@ -39,6 +39,7 @@ Guardas
 
 import datetime as dt
 import glob
+import inspect
 import json
 import os
 import re
@@ -899,25 +900,56 @@ def forms_secuencia(pasos: str) -> str:
                        f"(validas: {', '.join(acciones)})")
             break
         # Se parsea con regex y no con shlex: las rutas de las ayudas llevan
-        # espacios ("Bienes e inmuebles") y shlex partia
+        # espacios ("Bienes e inmuebles", "testeo mcp") y shlex partia
         # carpeta="Z:\...\Bienes e inmuebles\X" en tres tokens, con lo que
         # llegaba un argumento llamado 'e'. La clave es siempre un
         # identificador, asi que el valor es todo lo que va hasta la siguiente
         # clave o hasta el final — entre comillas o sin ellas.
-        kwargs = {}
+        #
+        # Ese "o sin ellas" era mentira hasta 2026-09-04: el patron acababa en
+        # (\S*), que corta en el primer espacio, y una ruta sin comillas se
+        # truncaba EN SILENCIO -"...\testeo mcp\FCALIFICA" quedaba en
+        # "...\testeo"- guardando las fotos en otro sitio. Ahora el valor
+        # termina donde empieza la siguiente clave, que es lo que decia el
+        # comentario.
+        # El tipo se toma de la FIRMA de la accion, no del aspecto del valor.
+        # Adivinandolo por el texto, `escribir texto=01` se convertia en int 1 y
+        # `w.escribir(1)` moria con "'int' object is not iterable" — y el propio
+        # ejemplo de este docstring, `escribir texto=346789097612`, habria
+        # fallado igual. Los codigos de SAFIX son texto que PARECE numero
+        # ('01', una matricula, un NIT), y perder el cero de la izquierda al
+        # teclear en la forma es peor todavia que el error: escribe otro dato.
+        firma = inspect.signature(acciones[nombre]).parameters
+        kwargs, sobran = {}, []
         for k, v_ent, v_com in re.findall(
-                r'([A-Za-z_][A-Za-z0-9_]*)=(?:"([^"]*)"|(\S*))', cola):
-            v = v_ent if v_ent else v_com
-            if v.lower() in ("true", "false"):
-                kwargs[k] = v.lower() == "true"
-            else:
-                try:
+                r'([A-Za-z_][A-Za-z0-9_]*)='
+                r'(?:"([^"]*)"|(.*?))'
+                r'(?=\s+[A-Za-z_][A-Za-z0-9_]*=|\s*$)', cola):
+            v = (v_ent if v_ent else v_com).strip()
+            p = firma.get(k)
+            if p is None:
+                sobran.append(k)
+                continue
+            tipo = p.annotation
+            try:
+                if tipo is bool:
+                    kwargs[k] = v.strip().lower() in ("true", "1", "si", "yes")
+                elif tipo is int:
                     kwargs[k] = int(v)
-                except ValueError:
-                    try:
-                        kwargs[k] = float(v)
-                    except ValueError:
-                        kwargs[k] = v
+                elif tipo is float:
+                    kwargs[k] = float(v)
+                else:
+                    kwargs[k] = v          # str y todo lo demas, tal cual
+            except ValueError:
+                sobran.append(f"{k} (se esperaba {getattr(tipo, '__name__', tipo)})")
+        if sobran:
+            # Un argumento mal escrito se ignoraba en silencio y el paso corria
+            # con el valor por defecto: `carpeta` mal tecleada guardaba la foto
+            # en la carpeta del dia y nadie se enteraba hasta buscarla.
+            log.append(_fallo(f"{linea}\n     argumento no valido para "
+                              f"'{nombre}': {', '.join(sobran)}. "
+                              f"Acepta: {', '.join(firma)}"))
+            break
         try:
             salida = str(acciones[nombre](**kwargs))
         except Exception as e:
